@@ -26,29 +26,36 @@ async function main() {
   s = apply(s, { type: 'SETUP_RANDOM', color: BOT, order: rng.shuffle(rosterPieceIds(BOT)) });
   s = apply(s, { type: 'SETUP_DONE', color: BOT });
 
+  // Use an async line iterator (not rl.question) so buffered/piped input —
+  // e.g. `printf '...' | npm run cli` or `< script.txt` — is fully consumed;
+  // rl.question drops all but the first line when stdin arrives in one chunk.
   const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const ask = (q: string) => new Promise<string>((res) => rl.question(q, res));
+  const promptFor = (): string => (s.phase === 'SETUP' ? 'setup> ' : 'move> ');
 
+  // Human (RED) moves first, so no bot turn is needed before the first prompt.
   console.log(renderView(viewFor(s, HUMAN)));
-  while (s.phase !== 'GAME_OVER') {
-    if (s.phase === 'PLAY' && s.turn === BOT) {
-      s = apply(s, heuristicBot(viewFor(s, BOT), rng));
-      if (s.phase !== 'GAME_OVER') console.log(renderView(viewFor(s, HUMAN)));
-      continue;
-    }
-    const line = await ask(s.phase === 'SETUP' ? 'setup> ' : 'move> ');
+  process.stdout.write(promptFor());
+
+  for await (const line of rl) {
     const parsed = parseCommand(line, HUMAN);
     if (parsed.kind === 'meta') {
       if (parsed.meta === 'quit') break;
       if (parsed.meta === 'board') console.log(renderView(viewFor(s, HUMAN)));
       if (parsed.meta === 'help') console.log('commands: move a2 a3 | setup preset balanced | setup random | done | resign | board | quit');
-      continue;
+    } else if (parsed.kind === 'error') {
+      console.log(parsed.message);
+    } else {
+      let action = parsed.action;
+      if (action.type === 'SETUP_RANDOM') action = { ...action, order: rng.shuffle(rosterPieceIds(HUMAN)) };
+      s = apply(s, action);
+      // Let the bot take its turn(s) in response.
+      while (s.phase === 'PLAY' && s.turn === BOT) {
+        s = apply(s, heuristicBot(viewFor(s, BOT), rng));
+      }
+      if (s.phase !== 'GAME_OVER') console.log(renderView(viewFor(s, HUMAN)));
     }
-    if (parsed.kind === 'error') { console.log(parsed.message); continue; }
-    let action = parsed.action;
-    if (action.type === 'SETUP_RANDOM') action = { ...action, order: rng.shuffle(rosterPieceIds(HUMAN)) };
-    s = apply(s, action);
-    if (s.phase === 'PLAY' && s.turn === HUMAN) console.log(renderView(viewFor(s, HUMAN)));
+    if (s.phase === 'GAME_OVER') break;
+    process.stdout.write(promptFor());
   }
   console.log('Game over.');
   rl.close();
