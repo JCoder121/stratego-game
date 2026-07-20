@@ -14,12 +14,12 @@ function place(s: GameState, id: string, sq: Square): GameState {
 describe('destinationsFor', () => {
   test('marshal moves one square orthogonally into empty squares', () => {
     let s = createGame();
-    s = place(s, 'RED-MARSHAL-0', { r: 5, c: 5 });
+    s = place(s, 'RED-MARSHAL-0', { r: 2, c: 5 }); // lake-free interior square
     const dests = destinationsFor(s, 'RED-MARSHAL-0');
-    expect(dests).toContainEqual({ r: 4, c: 5 });
-    expect(dests).toContainEqual({ r: 6, c: 5 });
-    expect(dests).toContainEqual({ r: 5, c: 4 });
-    expect(dests).toContainEqual({ r: 5, c: 6 });
+    expect(dests).toContainEqual({ r: 1, c: 5 });
+    expect(dests).toContainEqual({ r: 3, c: 5 });
+    expect(dests).toContainEqual({ r: 2, c: 4 });
+    expect(dests).toContainEqual({ r: 2, c: 6 });
     expect(dests).toHaveLength(4);
   });
   test('cannot move onto a lake', () => {
@@ -30,12 +30,12 @@ describe('destinationsFor', () => {
   });
   test('cannot move onto a friendly piece; can move onto an enemy', () => {
     let s = createGame();
-    s = place(s, 'RED-MARSHAL-0', { r: 5, c: 5 });
-    s = place(s, 'RED-SCOUT-0', { r: 5, c: 6 });   // friendly right
-    s = place(s, 'BLUE-SCOUT-0', { r: 5, c: 4 });  // enemy left
+    s = place(s, 'RED-MARSHAL-0', { r: 2, c: 5 }); // lake-free interior square
+    s = place(s, 'RED-SCOUT-0', { r: 2, c: 6 });   // friendly right
+    s = place(s, 'BLUE-SCOUT-0', { r: 2, c: 4 });  // enemy left
     const dests = destinationsFor(s, 'RED-MARSHAL-0');
-    expect(dests).not.toContainEqual({ r: 5, c: 6 });
-    expect(dests).toContainEqual({ r: 5, c: 4 });
+    expect(dests).not.toContainEqual({ r: 2, c: 6 });
+    expect(dests).toContainEqual({ r: 2, c: 4 });
   });
   test('bomb and flag never move', () => {
     let s = createGame();

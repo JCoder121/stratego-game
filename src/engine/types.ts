@@ -80,7 +80,7 @@ export const ROSTER: Record<Rank, number> = {
 // Standard two 2x2 lakes (0-indexed): rows 4-5, cols 2-3 and 7-8.
 export const LAKES: Square[] = [
   { r: 4, c: 2 }, { r: 4, c: 3 }, { r: 5, c: 2 }, { r: 5, c: 3 },
-  { r: 4, c: 7 }, { r: 4, c: 8 }, { r: 5, c: 7 }, { r: 5, c: 8 },
+  { r: 4, c: 6 }, { r: 4, c: 7 }, { r: 5, c: 6 }, { r: 5, c: 7 },
 ];
 
 // Row 0 = Blue back row, row 9 = Red back row. Each player fills their back 4 rows.
