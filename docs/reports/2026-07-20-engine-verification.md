@@ -54,7 +54,43 @@ _(filled by Task 5)_
 
 ## 5. CLI E2E
 
-_(filled by Task 4)_
+`test/e2e/cli.test.ts` — black-box suite spawning `npx tsx src/cli/main.ts` with piped stdin,
+7 scenarios, all pass (also included in `npm test`'s 105). Added `test/e2e/**/*.test.ts` to
+`vitest.config.ts`'s `include` list, same as Task 2 did for `test/conformance`.
+
+**CLI determinism (`src/cli/main.ts`):** added an opt-in `STRATEGO_SEED=<int>` env var that
+swaps `makeRandom()` for `makeSeeded(Number(seedEnv))`; unset behavior (the default) is
+unchanged. This makes both the bot's setup shuffle and its in-play move choice reproducible,
+which the E2E suite's determinism test depends on.
+
+| scenario | result |
+| --- | --- |
+| `help` prints command list; `quit` exits cleanly | PASS |
+| unknown command and malformed squares produce error messages, not crashes | PASS |
+| `setup preset balanced` + `done` starts play and renders the board | PASS |
+| `setup random` + `done` also reaches play | PASS |
+| a legal move is applied and the bot answers; `resign` ends the game (BLUE wins) | PASS |
+| illegal move is rejected with a reason and the game continues to resign | PASS |
+| deterministic under a fixed seed: identical transcripts across two runs | PASS |
+
+**Adjustments vs. the brief (both flagged as possible in the brief; neither needed engine changes):**
+
+1. **`move e5 e7` rejection scenario.** Ran as written and it passed on the first try — no
+   adjustment needed. `e5` (`{r:5,c:4}`) is untouched by the preceding `move a4 a5` (column `a`
+   only), so it's an empty no-man's-land square; the engine rejects a move from an empty source,
+   the CLI prints `rejected: <reason>`, and the test only asserts the generic `rejected:` prefix
+   (not a specific reason string), so it's robust to whichever validation reason fires first.
+   Reworded the in-test comment to explain *why* e5 is empty rather than leaving the brief's
+   stale "back-corner"/bombs framing (that language described a different from-square than the
+   one actually used).
+2. **Unused `cli`/`execFile` helper.** Removed entirely, per the brief's instruction — only
+   `cliWithInput` (built on `child_process.spawn`) is used by any test, so the `execFile`-based
+   `cli()` helper and its `promisify` import were dropped rather than kept dead.
+
+Note: running the CLI (`npm run cli`) or the E2E suite requires filesystem access outside this
+session's default sandbox — `tsx`'s child process opens an IPC pipe under `/tmp` — so both the
+manual smoke test and `npx vitest run test/e2e/cli.test.ts` / `npm test` were run with the
+sandbox disabled.
 
 ## 6. Findings & recommendation
 

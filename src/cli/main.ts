@@ -4,11 +4,13 @@ import type { Action, Color, GameState } from '../engine/types.js';
 import { parseCommand } from './parse.js';
 import { renderView, renderEvents } from './render.js';
 import { heuristicBot } from '../bots/heuristic.js';
-import { makeRandom } from '../rng/rng.js';
+import { makeRandom, makeSeeded } from '../rng/rng.js';
 
 const HUMAN: Color = 'RED';
 const BOT: Color = 'BLUE';
-const rng = makeRandom();
+// STRATEGO_SEED=<int> makes the whole session deterministic (used by E2E tests).
+const seedEnv = process.env.STRATEGO_SEED;
+const rng = seedEnv !== undefined ? makeSeeded(Number(seedEnv)) : makeRandom();
 
 function apply(s: GameState, action: Action): GameState {
   const { state, events } = strategoReduce(s, action);
