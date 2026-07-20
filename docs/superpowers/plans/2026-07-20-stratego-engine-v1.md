@@ -1416,7 +1416,7 @@ git commit -m "feat: action validation"
   - `SETUP_DONE`: mark `setupDone[color]=true`, emit `SETUP_COMPLETED`; when both done → `phase='PLAY'`, `turn='RED'`, emit `PLAY_STARTED`.
   - `MOVE` (no occupant at `to`): move piece; if Scout moved >1 square, set `revealed=true`; update `recentMoves`; emit `PIECE_MOVED`; then advance turn & check end conditions.
   - `MOVE` onto enemy (attack): both pieces become `revealed=true`; compute `resolveCombat`; emit `STRIKE`; apply outcome (`ATTACKER`: defender captured, attacker moves in — special `BOMB_DEFUSED`/`FLAG_CAPTURED` events; `DEFENDER`: attacker captured, defender stays; `BOTH`: both captured); clear the moved piece's `recentMoves` on any strike; if flag captured → game over; else advance turn & check end conditions.
-  - After each PLAY action, `plyCount++`; end-condition order: flag captured (handled inline) → opponent has no legal action (`NO_MOVES`, opponent loses) → dead position (neither side movable → draw) → ply cap (`PLY_CAP` draw). Emit `TURN_PASSED` then `GAME_OVER` when applicable.
+  - After each PLAY action, `plyCount++`; end-condition order: flag captured (handled inline) → dead position (neither side movable → draw) → opponent has no legal action (`NO_MOVES`, opponent loses) → ply cap (`PLY_CAP` draw). Dead position is checked BEFORE no-moves because a movable-empty side also has zero legal moves. Emit `TURN_PASSED` then `GAME_OVER` when applicable.
 
 - [ ] **Step 1: Write failing test `test/unit/reduce.test.ts`**
 
@@ -1545,15 +1545,18 @@ function applyEndConditions(
 ): void {
   // Called after a non-flag-capturing PLAY action; s.turn already advanced.
   const mover = other(s.turn); // player who just moved
-  if (!hasAnyLegalAction(s, s.turn)) {
-    s.phase = 'GAME_OVER';
-    s.result = { winner: mover, reason: 'NO_MOVES' };
-    events.push({ type: 'GAME_OVER', result: s.result });
-    return;
-  }
+  // Dead position MUST be checked before NO_MOVES: a side with zero movable
+  // pieces also has zero legal moves, so if both sides are movable-empty the
+  // NO_MOVES branch would otherwise fire first and mis-report a draw as a win.
   if (movablePieceCount(s, 'RED') === 0 && movablePieceCount(s, 'BLUE') === 0) {
     s.phase = 'GAME_OVER';
     s.result = { winner: null, reason: 'DEAD_POSITION' };
+    events.push({ type: 'GAME_OVER', result: s.result });
+    return;
+  }
+  if (!hasAnyLegalAction(s, s.turn)) {
+    s.phase = 'GAME_OVER';
+    s.result = { winner: mover, reason: 'NO_MOVES' };
     events.push({ type: 'GAME_OVER', result: s.result });
     return;
   }
