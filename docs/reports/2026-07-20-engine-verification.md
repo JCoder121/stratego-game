@@ -6,7 +6,7 @@ Pre-ML gate for the ML track (spec: docs/superpowers/specs/2026-07-20-ml-track-d
 
 | Check | Result |
 | --- | --- |
-| `npm test` (unit + property) | PASS, 73 tests |
+| `npm test` (unit + property + conformance + analyze + E2E) | PASS, 105 tests (73 baseline + 22 conformance + 3 analyze + 7 E2E) |
 | `npm run typecheck` | TYPECHECK_OK |
 | `SIM=1 npm run test:sim` | PASS, 2 tests |
 | `npm run sim` (200 games, heuristic vs random) | `{ redWins: 81, blueWins: 119, draws: 0, avgPlies: 156.305, reasons: { FLAG_CAPTURED: 88, RESIGN: 112 } }` |
@@ -181,4 +181,91 @@ sandbox disabled.
 
 ## 6. Findings & recommendation
 
-_(filled by Task 6)_
+### Engine correctness verdict
+
+The engine is verified correct. A clean re-run of the full suite (`npm test`, `npm run
+typecheck`, `SIM=1 npm run test:sim`) is all-green: 105/105 tests pass (73 baseline + 22
+rules-conformance + 3 analyze + 7 CLI E2E), `tsc --noEmit` reports no errors, and the 2 gated
+property-style sim tests pass. The 22 rules-conformance scenarios (Section 2) independently
+confirm combat resolution (including both Spy-vs-Marshal directions), Bomb/Miner interaction,
+Scout movement and move-and-strike, the two-square rule (including its strike-clears-history
+behavior), and all four end conditions (`FLAG_CAPTURED`, `NO_MOVES`, `DEAD_POSITION`,
+`PLY_CAP`) against the documented rules. The property tests (piece conservation, reducer
+totality on junk input, guaranteed termination) hold across randomized play. Across the
+2,000-game instrumented batch (`docs/reports/data/2026-07-20-sim-full.json`), every pairing's
+`redWins + blueWins + draws` sums to 500 and every pairing's `endedBy` breakdown sums to 500 —
+no accounting drift. The only two findings from this verification pass are (1) two pre-existing
+test bugs, both fixed in the test file with no engine change (Section 2, Scout-vs-Miner
+expectation and the two-square/strike-reset scenario), and (2) the RESIGN/bot-blindness issue
+diagnosed below, which is a bot-strategy gap, not an engine defect.
+
+### RESIGN diagnosis
+
+Per `docs/reports/data/2026-07-20-sim-full.json` (Section 4): across all 2,000 games, RESIGN
+ends 1,036 games (51.8%), and **all 1,036 are `FORCED_RESIGN`** — `BOT_RESIGN` is 0 in every one
+of the 4 pairings. Of those 1,036 forced resigns, 100% had `engineLegalMoves > 0` at the moment
+of resignation (`forcedWithNoMoves` is 0 in every pairing — the CRITICAL escalation path, which
+would flag an engine bug, never fired), and 100% of the rejections that exhausted the bot's 5
+retry attempts carried the reason `"two-square rule violation"` — no other rejection reason
+(malformed move, occupied-by-own-piece, out-of-bounds) appears anywhere in the dataset. The
+causal story: the engine is behaving exactly as specified (README / design spec: a piece may not
+complete a third consecutive back-and-forth traversal of the same two squares, strikes included
+per Section 2's finding), but `randomBot` and `heuristicBot` never read `view.recentMoves` —
+they resample uniformly from the same static `legalMovesFromView` list, which does not filter
+out two-square violations. When a bot's short-term preference lands it in an a↔b oscillation, it
+keeps re-proposing the same banned move (or another violation) on all 5 attempts and the engine
+forces a resign as its only escape hatch. Hand-replayed sample seeds (Section 4) show this
+forcing a resign even when the resigning side holds a material advantage (e.g. 24 vs 10
+survivors in one heuristic-vs-heuristic sample) — the resign outcome in these cases reflects bot
+retry exhaustion, not board state.
+
+### Go/no-go recommendation for the bot fix
+
+- **A (recommended):** expose the viewer's own `recentMoves` in `PlayerView` and filter
+  two-square-violating moves out in `legalMovesFromView` — small, additive change confined to
+  `src/engine/redact.ts` (and whatever consumes `legalMovesFromView`). This kills the entire
+  `FORCED_RESIGN` class outright (100% of forced resigns trace to exactly this one blind spot,
+  per the diagnosis above), and it directly improves ML observation quality: an RL/imitation
+  agent trained on `PlayerView` needs to see its own oscillation history to learn to respect the
+  rule, the same information a bot needs to avoid triggering it. This is not implemented as part
+  of this verification task — it's out of this plan's scope (touches `src/engine/redact.ts`) and
+  is the user's decision to make before ML Task 2 begins.
+- **B:** leave as-is. RESIGN games still carry a valid win/loss signal for training (the engine's
+  handling of the forced-resign path itself is correct and tested), so this doesn't block the ML
+  track from starting. The cost: roughly half of all self-play games under the current bots end
+  via forced resign rather than by the underlying board state, which dilutes how much of the
+  training signal reflects genuine strategic outcomes vs. retry exhaustion — and Option A would
+  fix this for free alongside its ML-observation benefit, so B mainly makes sense if the user
+  wants to defer any `src/engine/` changes to a later, dedicated task rather than folding it into
+  this one.
+- **C (new, data-justified):** independently of the RESIGN question, the heuristic bot loses to
+  random in both color arrangements (183/500 as RED, 192/500 as BLUE — Section 3). If the
+  heuristic bot is meant to be a non-trivial ML baseline/opponent, it's currently weaker than
+  uniform-random play, which is worth addressing before it becomes an ML evaluation baseline.
+  The current explanation on file — that the heuristic's forward-bias walks it into unknown-rank
+  attacks (including unrevealed Bombs) more often than random's uniform sampling does — is a
+  **code-reading hypothesis** (from inspecting `src/bots/heuristic.ts`), not something this
+  verification pass instrumented or measured directly; treat it as a lead for follow-up, not a
+  confirmed root cause. Fixing the bot is optional and separable from A/B; flagging it now so the
+  user can decide whether to fold it into the same pass as Option A or track it separately.
+
+### Impact on the ML track
+
+The engine is trustworthy as ML training ground truth: correctness is independently confirmed by
+105 passing tests spanning unit, property-based, rules-conformance, and black-box CLI E2E
+coverage, plus 2,000 games of instrumented self-play with zero accounting anomalies and zero
+evidence of the engine ending games incorrectly (the `forcedWithNoMoves = 0` result rules out the
+one scenario — an engine-side bug masquerading as a legal forced resign — that would have made
+the RESIGN numbers an engine-trust problem rather than a bot-behavior one). The caveats for the
+Task 2 research memo / Task 3 Python port: (1) the two-square rule, including its
+strike-clears-history behavior, is easy to get subtly wrong in a reimplementation (Section 2
+found and fixed a test that got this wrong even in this codebase) — port the rules-conformance
+suite's two-square scenarios as explicit regression cases, not just prose from the README; (2)
+**the Python port's test-vector generation should include forced-resign seeds as regression
+cases** — the sample seeds hand-replayed in Section 4 (e.g. heuristic-vs-heuristic seed 1000,
+heuristic-vs-random seed 1000, random-vs-random seed 1000) are known-good, reproducible instances
+of the FORCED_RESIGN path and should be captured verbatim so a ported engine can be checked
+against the same outcome; (3) if the user picks Option B (leave RESIGN handling as-is) for the
+initial ML pass, the training pipeline should be aware that roughly half of self-play games under
+the current bots end by forced resign rather than board-state resolution, which is a data-quality
+consideration for reward/outcome labeling even though it isn't an engine-correctness problem.
