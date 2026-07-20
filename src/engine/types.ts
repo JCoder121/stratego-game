@@ -9,7 +9,8 @@ export interface Square { r: number; c: number }
 export type PieceId = string;
 
 export interface Piece {
-  id: PieceId;
+  id: PieceId; // real id, encodes rank (`${color}-${rank}-${index}`) — never expose for unrevealed enemies
+  viewId: string; // stable, rank-free opaque id (`${color}-p${n}`); safe to expose to opponents
   owner: Color;
   rank: Rank;
   revealed: boolean;

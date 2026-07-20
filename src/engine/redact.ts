@@ -23,7 +23,7 @@ export function viewFor(state: GameState, viewer: Color): PlayerView {
     if (p.pos === null) continue; // captured pieces are off-board
     const own = p.owner === viewer;
     pieces.push({
-      id: p.id,
+      id: own ? p.id : p.viewId,
       owner: p.owner,
       pos: p.pos,
       rank: own || p.revealed ? p.rank : null,

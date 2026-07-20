@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import fc from 'fast-check';
 import { arbAction } from './arbitraries.js';
-import { createGame, strategoReduce, viewFor, rosterPieceIds } from '../../src/engine/index.js';
+import { createGame, strategoReduce, viewFor, rosterPieceIds, RANKS } from '../../src/engine/index.js';
 import { makeSeeded } from '../../src/rng/rng.js';
 import { randomBot } from '../../src/bots/random.js';
 import type { GameState } from '../../src/engine/types.js';
@@ -77,7 +77,12 @@ describe('redaction never leaks unrevealed enemy ranks', () => {
       }
       const view = viewFor(s, 'RED');
       for (const vp of view.pieces) {
-        if (vp.owner === 'BLUE' && !vp.revealed) expect(vp.rank).toBeNull();
+        if (vp.owner === 'BLUE' && !vp.revealed) {
+          expect(vp.rank).toBeNull();
+          // The exposed id must not encode the true rank (e.g. a real id like
+          // "BLUE-MARSHAL-0" leaking via the redacted view's `id` field).
+          expect(RANKS.some((r) => vp.id.includes(r))).toBe(false);
+        }
       }
     }), { numRuns: 50 });
   });

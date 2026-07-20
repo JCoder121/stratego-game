@@ -28,8 +28,11 @@ describe('viewFor', () => {
     const s = playState();
     s.pieces['BLUE-MARSHAL-0']!.revealed = true;
     const view = viewFor(s, 'RED');
-    const revealed = view.pieces.find((p) => p.id === 'BLUE-MARSHAL-0')!;
+    // Enemy pieces are exposed under their rank-free viewId, never the real id.
+    const revealed = view.pieces.find((p) => p.owner === 'BLUE' && p.revealed)!;
     expect(revealed.rank).toBe('MARSHAL');
+    expect(revealed.id).toBe(s.pieces['BLUE-MARSHAL-0']!.viewId);
+    expect(revealed.id).not.toBe('BLUE-MARSHAL-0');
   });
   test('captured pieces are omitted', () => {
     const s = playState();
