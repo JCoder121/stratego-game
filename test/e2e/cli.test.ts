@@ -45,7 +45,7 @@ describe('CLI E2E (piped input, seeded)', () => {
   test('a legal move is applied and the bot answers; resign ends the game', async () => {
     const out = await cliWithInput('setup preset balanced\ndone\nmove a4 a5\nresign\n');
     // Human moved without rejection…
-    expect(out).not.toContain('rejected: illegal destination');
+    expect(out).not.toContain('rejected:');
     // …and the game ends by resignation with BLUE the winner.
     expect(out).toContain('GAME OVER: BLUE (RESIGN)');
     expect(out).toContain('Game over.');
