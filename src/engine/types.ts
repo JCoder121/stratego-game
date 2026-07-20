@@ -77,7 +77,7 @@ export const ROSTER: Record<Rank, number> = {
   BOMB: 6, FLAG: 1,
 };
 
-// Standard two 2x2 lakes (0-indexed): rows 4-5, cols 2-3 and 7-8.
+// Standard two 2x2 lakes (0-indexed): rows 4-5, cols 2-3 and 6-7.
 export const LAKES: Square[] = [
   { r: 4, c: 2 }, { r: 4, c: 3 }, { r: 5, c: 2 }, { r: 5, c: 3 },
   { r: 4, c: 6 }, { r: 4, c: 7 }, { r: 5, c: 6 }, { r: 5, c: 7 },
