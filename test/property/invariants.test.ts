@@ -52,7 +52,17 @@ describe('piece conservation', () => {
         s = strategoReduce(s, action).state;
       }
       expect(rosterPieceIds('RED')).toHaveLength(40);
-      expect(Object.keys(s.pieces)).toHaveLength(80); // pieces never created/destroyed as records
+      const pieces = Object.values(s.pieces);
+      expect(pieces).toHaveLength(80); // pieces never created/destroyed as records
+
+      // On-board + captured accounting reconciles to the full roster.
+      const onBoard = pieces.filter((p) => p.pos !== null);
+      const captured = pieces.filter((p) => p.pos === null);
+      expect(onBoard.length + captured.length).toBe(80);
+
+      // No two on-board pieces occupy the same square.
+      const squares = onBoard.map((p) => `${p.pos!.r},${p.pos!.c}`);
+      expect(new Set(squares).size).toBe(onBoard.length);
     }), { numRuns: 50 });
   });
 });
