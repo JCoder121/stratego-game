@@ -44,4 +44,38 @@ describe('bots', () => {
     const { events } = strategoReduce(s, action);
     expect(events[0]!.type).not.toBe('REJECTED');
   });
+
+  test('legalMovesFromView excludes a move that would violate the two-square rule, keeping others', () => {
+    // Manual view: an open board so the scout isn't boxed in, plus a second own
+    // piece to prove filtering doesn't wipe out unrelated moves.
+    const x = { r: 5, c: 5 };
+    const y = { r: 4, c: 5 }; // one step "up" from x
+    const view = {
+      viewer: 'RED' as const,
+      phase: 'PLAY' as const,
+      turn: 'RED' as const,
+      plyCount: 4,
+      result: null,
+      pieces: [
+        { id: 'RED-SCOUT-0', owner: 'RED' as const, pos: x, rank: 'SCOUT' as const, revealed: false },
+        { id: 'RED-MINER-0', owner: 'RED' as const, pos: { r: 5, c: 0 }, rank: 'MINER' as const, revealed: false },
+      ],
+      // Oscillation history: X->Y then Y->X; a third X->Y is the banned repeat.
+      myRecentMoves: {
+        'RED-SCOUT-0': [
+          { pieceId: 'RED-SCOUT-0', from: x, to: y },
+          { pieceId: 'RED-SCOUT-0', from: y, to: x },
+        ],
+      },
+    };
+    const moves = legalMovesFromView(view);
+    const thirdRepeat = moves.find(
+      (m) => m.from.r === x.r && m.from.c === x.c && m.to.r === y.r && m.to.c === y.c,
+    );
+    expect(thirdRepeat).toBeUndefined();
+    // Other moves for the oscillating scout (e.g. sideways) and for the other
+    // piece remain available.
+    expect(moves.some((m) => m.from.r === x.r && m.from.c === x.c && !(m.to.r === y.r && m.to.c === y.c))).toBe(true);
+    expect(moves.some((m) => m.from.r === 5 && m.from.c === 0)).toBe(true);
+  });
 });

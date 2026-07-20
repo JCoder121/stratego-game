@@ -230,6 +230,8 @@ retry exhaustion, not board state.
   rule, the same information a bot needs to avoid triggering it. This is not implemented as part
   of this verification task — it's out of this plan's scope (touches `src/engine/redact.ts`) and
   is the user's decision to make before ML Task 2 begins.
+
+  **Decision (2026-07-20):** user chose Option A; implemented in branch `fix/bot-two-square-blindness`.
 - **B:** leave as-is. RESIGN games still carry a valid win/loss signal for training (the engine's
   handling of the forced-resign path itself is correct and tested), so this doesn't block the ML
   track from starting. The cost: roughly half of all self-play games under the current bots end
