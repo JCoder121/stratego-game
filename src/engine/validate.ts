@@ -3,12 +3,12 @@ import { pieceAt } from './init.js';
 import { destinationsFor } from './moves.js';
 import { rosterPieceIds } from './init.js';
 import { isMovable } from './pieceDefs.js';
-import { setupSquares, isSetupComplete } from './setups.js';
+import { isSetupComplete } from './setups.js';
 import { violatesTwoSquare } from './rules.js';
-import { SETUP_ROWS, type Action, type GameState, type Square } from './types.js';
+import { BOARD_SIZE, SETUP_ROWS, type Action, type GameState, type Square } from './types.js';
 
 function isSetupSquare(color: GameState['turn'], sq: Square): boolean {
-  return SETUP_ROWS[color].includes(sq.r) && sq.c >= 0 && sq.c < 10;
+  return SETUP_ROWS[color].includes(sq.r) && sq.c >= 0 && sq.c < BOARD_SIZE;
 }
 
 export function validateAction(state: GameState, action: Action): string | null {
