@@ -1,0 +1,174 @@
+{
+  "gamesPerPairing": 500,
+  "baseSeed": 1000,
+  "reports": [
+    {
+      "red": "random",
+      "blue": "random",
+      "stats": {
+        "games": 500,
+        "redWins": 258,
+        "blueWins": 241,
+        "draws": 1,
+        "reasons": {
+          "RESIGN": 262,
+          "FLAG_CAPTURED": 218,
+          "NO_MOVES": 19,
+          "PLY_CAP": 1
+        },
+        "endedBy": {
+          "FORCED_RESIGN": 262,
+          "ENGINE": 238
+        },
+        "forcedResignReasons": {
+          "two-square rule violation": 262
+        },
+        "plies": {
+          "mean": 405.632,
+          "p50": 262,
+          "p90": 1030,
+          "max": 2000
+        }
+      },
+      "forcedWithMovesLeft": 262,
+      "forcedWithNoMoves": 0,
+      "sampleForcedSeeds": [
+        1000,
+        1001,
+        1002,
+        1004,
+        1005,
+        1009,
+        1010,
+        1014,
+        1015,
+        1017
+      ]
+    },
+    {
+      "red": "heuristic",
+      "blue": "random",
+      "stats": {
+        "games": 500,
+        "redWins": 183,
+        "blueWins": 317,
+        "draws": 0,
+        "reasons": {
+          "RESIGN": 268,
+          "FLAG_CAPTURED": 229,
+          "NO_MOVES": 3
+        },
+        "endedBy": {
+          "FORCED_RESIGN": 268,
+          "ENGINE": 232
+        },
+        "forcedResignReasons": {
+          "two-square rule violation": 268
+        },
+        "plies": {
+          "mean": 149.902,
+          "p50": 155,
+          "p90": 260,
+          "max": 481
+        }
+      },
+      "forcedWithMovesLeft": 268,
+      "forcedWithNoMoves": 0,
+      "sampleForcedSeeds": [
+        1000,
+        1003,
+        1004,
+        1005,
+        1006,
+        1007,
+        1009,
+        1010,
+        1013,
+        1014
+      ]
+    },
+    {
+      "red": "random",
+      "blue": "heuristic",
+      "stats": {
+        "games": 500,
+        "redWins": 308,
+        "blueWins": 192,
+        "draws": 0,
+        "reasons": {
+          "RESIGN": 276,
+          "FLAG_CAPTURED": 222,
+          "NO_MOVES": 2
+        },
+        "endedBy": {
+          "FORCED_RESIGN": 276,
+          "ENGINE": 224
+        },
+        "forcedResignReasons": {
+          "two-square rule violation": 276
+        },
+        "plies": {
+          "mean": 153.476,
+          "p50": 155,
+          "p90": 261,
+          "max": 389
+        }
+      },
+      "forcedWithMovesLeft": 276,
+      "forcedWithNoMoves": 0,
+      "sampleForcedSeeds": [
+        1000,
+        1001,
+        1004,
+        1005,
+        1006,
+        1009,
+        1013,
+        1014,
+        1015,
+        1016
+      ]
+    },
+    {
+      "red": "heuristic",
+      "blue": "heuristic",
+      "stats": {
+        "games": 500,
+        "redWins": 251,
+        "blueWins": 249,
+        "draws": 0,
+        "reasons": {
+          "RESIGN": 230,
+          "FLAG_CAPTURED": 270
+        },
+        "endedBy": {
+          "FORCED_RESIGN": 230,
+          "ENGINE": 270
+        },
+        "forcedResignReasons": {
+          "two-square rule violation": 230
+        },
+        "plies": {
+          "mean": 110.262,
+          "p50": 111,
+          "p90": 190,
+          "max": 272
+        }
+      },
+      "forcedWithMovesLeft": 230,
+      "forcedWithNoMoves": 0,
+      "sampleForcedSeeds": [
+        1000,
+        1001,
+        1002,
+        1003,
+        1005,
+        1006,
+        1009,
+        1010,
+        1014,
+        1019
+      ]
+    }
+  ]
+}

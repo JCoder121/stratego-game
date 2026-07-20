@@ -9,7 +9,8 @@
     "test:sim": "SIM=1 vitest run test/sim",
     "typecheck": "tsc --noEmit",
     "cli": "tsx src/cli/main.ts",
-    "sim": "tsx src/sim/run.ts"
+    "sim": "tsx src/sim/run.ts",
+    "sim:full": "tsx src/sim/full.ts"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
