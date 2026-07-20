@@ -1,4 +1,4 @@
-import type { Color, GameResult, GameState, Phase, PieceId, Rank, Square } from './types.js';
+import type { Color, GameResult, GameState, MoveRecord, Phase, PieceId, Rank, Square } from './types.js';
 
 export interface VisiblePiece {
   id: PieceId;
@@ -15,10 +15,14 @@ export interface PlayerView {
   plyCount: number;
   pieces: VisiblePiece[];
   result: GameResult | null;
+  // Move history for the viewer's OWN pieces only, keyed by their real id.
+  // Never includes enemy recentMoves entries — those must not leak.
+  myRecentMoves: Record<PieceId, MoveRecord[]>;
 }
 
 export function viewFor(state: GameState, viewer: Color): PlayerView {
   const pieces: VisiblePiece[] = [];
+  const myRecentMoves: Record<PieceId, MoveRecord[]> = {};
   for (const p of Object.values(state.pieces)) {
     if (p.pos === null) continue; // captured pieces are off-board
     const own = p.owner === viewer;
@@ -29,6 +33,10 @@ export function viewFor(state: GameState, viewer: Color): PlayerView {
       rank: own || p.revealed ? p.rank : null,
       revealed: p.revealed,
     });
+    if (own) {
+      const recent = state.recentMoves[p.id];
+      if (recent) myRecentMoves[p.id] = recent;
+    }
   }
   return {
     viewer,
@@ -37,5 +45,6 @@ export function viewFor(state: GameState, viewer: Color): PlayerView {
     plyCount: state.plyCount,
     pieces,
     result: state.result,
+    myRecentMoves,
   };
 }

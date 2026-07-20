@@ -40,4 +40,25 @@ describe('viewFor', () => {
     const view = viewFor(s, 'RED');
     expect(view.pieces.find((p) => p.id === 'BLUE-SCOUT-0')).toBeUndefined();
   });
+
+  test('myRecentMoves exposes only the viewer\'s own piece history, never enemy history', () => {
+    const s = playState();
+    const redRec = [
+      { pieceId: 'RED-SCOUT-0', from: { r: 6, c: 0 }, to: { r: 5, c: 0 } },
+      { pieceId: 'RED-SCOUT-0', from: { r: 5, c: 0 }, to: { r: 6, c: 0 } },
+    ];
+    const blueRec = [
+      { pieceId: 'BLUE-SCOUT-0', from: { r: 3, c: 0 }, to: { r: 4, c: 0 } },
+    ];
+    s.recentMoves['RED-SCOUT-0'] = redRec;
+    s.recentMoves['BLUE-SCOUT-0'] = blueRec;
+
+    const redView = viewFor(s, 'RED');
+    expect(redView.myRecentMoves['RED-SCOUT-0']).toEqual(redRec);
+    expect(redView.myRecentMoves['BLUE-SCOUT-0']).toBeUndefined();
+
+    const blueView = viewFor(s, 'BLUE');
+    expect(blueView.myRecentMoves['BLUE-SCOUT-0']).toEqual(blueRec);
+    expect(blueView.myRecentMoves['RED-SCOUT-0']).toBeUndefined();
+  });
 });
