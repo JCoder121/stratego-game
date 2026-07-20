@@ -22,7 +22,8 @@ export function randomPlacement(color: Color, order: PieceId[]): Record<PieceId,
 
 // Presets are defined by an ordering of rosterPieceIds mapped positionally onto
 // setupSquares (row-major from the front row toward the back row). rosterPieceIds
-// returns ranks high→low then bombs then flag; setupSquares lists front→back, so
+// returns ranks high→low then bombs then flag; setupSquares lists rows in
+// SETUP_ROWS order, which is front→back for RED but back→front for BLUE, so
 // the flag & bombs (end of roster) land on the back rows.
 export function presetNames(): string[] {
   return ['balanced', 'bombs-back'];
@@ -38,8 +39,11 @@ export function presetPlacement(color: Color, name: string): Record<PieceId, Squ
     const flag = ids.filter((i) => i.includes('-FLAG-'));
     const bombs = ids.filter((i) => i.includes('-BOMB-'));
     const rest = ids.filter((i) => !i.includes('-FLAG-') && !i.includes('-BOMB-'));
-    // setupSquares is front→back; reverse so index 0 is the back row (flag first).
-    const squares = setupSquares(color).slice().reverse();
+    // Order rows back-first, independent of SETUP_ROWS' literal (asymmetric) order,
+    // so index 0 is always the row nearest each color's home edge (flag first).
+    const backFirstRows = [...SETUP_ROWS[color]].sort((a, b) => (color === 'RED' ? b - a : a - b));
+    const squares: Square[] = [];
+    for (const r of backFirstRows) for (let c = 0; c < BOARD_SIZE; c++) squares.push({ r, c });
     const order = [...flag, ...bombs, ...rest];
     const map: Record<PieceId, Square> = {};
     order.forEach((id, i) => { map[id] = squares[i]!; });

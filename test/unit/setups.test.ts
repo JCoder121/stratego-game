@@ -27,6 +27,10 @@ describe('setups', () => {
     const flagSq = placement['RED-FLAG-0']!;
     expect(flagSq.r).toBe(9); // Red's back row
   });
+  test('bombs-back flag is on the back row for both colors', () => {
+    expect(presetPlacement('RED', 'bombs-back')!['RED-FLAG-0']!.r).toBe(9);
+    expect(presetPlacement('BLUE', 'bombs-back')!['BLUE-FLAG-0']!.r).toBe(0);
+  });
   test('randomPlacement uses all squares exactly once', () => {
     const order = rosterPieceIds('BLUE');
     const placement = randomPlacement('BLUE', order);
