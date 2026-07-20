@@ -13,7 +13,7 @@ Pre-ML gate for the ML track (spec: docs/superpowers/specs/2026-07-20-ml-track-d
 
 ## 2. Rules-conformance scenarios
 
-`test/conformance/rules.test.ts` — 22 scenarios, all pass (also included in `npm test`'s 95).
+`test/conformance/rules.test.ts` — 22 scenarios, all pass (also included in `npm test`'s 105).
 Added `test/conformance/**/*.test.ts` to `vitest.config.ts`'s `include` list so `npm test` picks
 up the suite (it was omitted from the original include globs).
 
@@ -194,7 +194,7 @@ behavior), and all four end conditions (`FLAG_CAPTURED`, `NO_MOVES`, `DEAD_POSIT
 totality on junk input, guaranteed termination) hold across randomized play. Across the
 2,000-game instrumented batch (`docs/reports/data/2026-07-20-sim-full.json`), every pairing's
 `redWins + blueWins + draws` sums to 500 and every pairing's `endedBy` breakdown sums to 500 —
-no accounting drift. The only two findings from this verification pass are (1) two pre-existing
+no accounting drift. The only two engine-correctness findings from this verification pass are (1) two pre-existing
 test bugs, both fixed in the test file with no engine change (Section 2, Scout-vs-Miner
 expectation and the two-square/strike-reset scenario), and (2) the RESIGN/bot-blindness issue
 diagnosed below, which is a bot-strategy gap, not an engine defect.
