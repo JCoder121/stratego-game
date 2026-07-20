@@ -14,4 +14,13 @@ describe('simulation', () => {
     expect(stats.redWins + stats.blueWins + stats.draws).toBe(100);
     expect(stats.avgPlies).toBeGreaterThan(0);
   });
+  test('heuristic bot beats random decisively both colors (regression floor)', () => {
+    // Measured 2026-07-20 after attack-discipline + pursuit fix: ~84% both
+    // colors over 1000 fresh-seed games. Floor set loosely at 60% so minor
+    // bot tweaks don't flake; a drop below this means the bot regressed.
+    const asRed = runSims({ games: 100, seed: 40000, red: heuristicBot, blue: randomBot });
+    const asBlue = runSims({ games: 100, seed: 50000, red: randomBot, blue: heuristicBot });
+    expect(asRed.redWins).toBeGreaterThanOrEqual(60);
+    expect(asBlue.blueWins).toBeGreaterThanOrEqual(60);
+  });
 });
