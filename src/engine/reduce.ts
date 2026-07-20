@@ -1,12 +1,10 @@
-import { sameSquare, stepsBetween } from './board.js';
 import { resolveCombat } from './combat.js';
 import { pieceAt } from './init.js';
 import { isScout } from './pieceDefs.js';
-import { presetPlacement, randomPlacement, setupSquares } from './setups.js';
-import { hasAnyLegalAction, movablePieceCount, recordMove, violatesTwoSquare } from './rules.js';
-import { rosterPieceIds } from './init.js';
+import { presetPlacement, randomPlacement } from './setups.js';
+import { hasAnyLegalAction, movablePieceCount, recordMove } from './rules.js';
 import { validateAction } from './validate.js';
-import type { Action, Color, GameEvent, GameState, Piece, PieceId, Square } from './types.js';
+import type { Action, Color, GameEvent, GameState } from './types.js';
 
 function clone(s: GameState): GameState {
   return JSON.parse(JSON.stringify(s)) as GameState;
@@ -23,15 +21,15 @@ function applyEndConditions(
 ): void {
   // Called after a non-flag-capturing PLAY action; s.turn already advanced.
   const mover = other(s.turn); // player who just moved
-  if (!hasAnyLegalAction(s, s.turn)) {
-    s.phase = 'GAME_OVER';
-    s.result = { winner: mover, reason: 'NO_MOVES' };
-    events.push({ type: 'GAME_OVER', result: s.result });
-    return;
-  }
   if (movablePieceCount(s, 'RED') === 0 && movablePieceCount(s, 'BLUE') === 0) {
     s.phase = 'GAME_OVER';
     s.result = { winner: null, reason: 'DEAD_POSITION' };
+    events.push({ type: 'GAME_OVER', result: s.result });
+    return;
+  }
+  if (!hasAnyLegalAction(s, s.turn)) {
+    s.phase = 'GAME_OVER';
+    s.result = { winner: mover, reason: 'NO_MOVES' };
     events.push({ type: 'GAME_OVER', result: s.result });
     return;
   }

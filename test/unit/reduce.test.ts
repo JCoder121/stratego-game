@@ -4,6 +4,23 @@ import { createGame } from '../../src/engine/init.js';
 import { presetPlacement } from '../../src/engine/setups.js';
 import type { GameState } from '../../src/engine/types.js';
 
+function minimalDeadPositionState(): GameState {
+  // Both sides own only their FLAG and one movable piece (all other pieces
+  // stay unplaced, pos: null). The two movable pieces share a rank so their
+  // strike resolves as BOTH (mutual destruction), leaving each side with
+  // only its immovable FLAG on the board.
+  const s = createGame();
+  s.pieces['RED-FLAG-0']!.pos = { r: 9, c: 0 };
+  s.pieces['RED-SERGEANT-0']!.pos = { r: 5, c: 0 };
+  s.pieces['BLUE-FLAG-0']!.pos = { r: 0, c: 0 };
+  s.pieces['BLUE-SERGEANT-0']!.pos = { r: 4, c: 0 };
+  s.setupDone.RED = true;
+  s.setupDone.BLUE = true;
+  s.phase = 'PLAY';
+  s.turn = 'RED';
+  return s;
+}
+
 function playState(): GameState {
   const s = createGame();
   for (const color of ['RED', 'BLUE'] as const) {
@@ -90,5 +107,17 @@ describe('moves and combat', () => {
     const { state } = strategoReduce(s, { type: 'MOVE', color: 'RED', from: { r: 1, c: 5 }, to: { r: 0, c: 5 } });
     expect(state.pieces['RED-CAPTAIN-0']!.pos).toBeNull();
     expect(state.pieces['BLUE-BOMB-0']!.pos).toEqual({ r: 0, c: 5 });
+  });
+  test('mutual destruction leaving only flags is a DEAD_POSITION draw, not a NO_MOVES win', () => {
+    const s = minimalDeadPositionState();
+    const { state, events } = strategoReduce(s, { type: 'MOVE', color: 'RED', from: { r: 5, c: 0 }, to: { r: 4, c: 0 } });
+    expect(events.some((e) => e.type === 'STRIKE' && e.outcome === 'BOTH')).toBe(true);
+    expect(state.pieces['RED-SERGEANT-0']!.pos).toBeNull();
+    expect(state.pieces['BLUE-SERGEANT-0']!.pos).toBeNull();
+    expect(state.phase).toBe('GAME_OVER');
+    expect(state.result).toEqual({ winner: null, reason: 'DEAD_POSITION' });
+    const gameOver = events.find((e) => e.type === 'GAME_OVER');
+    expect(gameOver).toBeDefined();
+    expect(gameOver && 'result' in gameOver ? gameOver.result : undefined).toEqual({ winner: null, reason: 'DEAD_POSITION' });
   });
 });
