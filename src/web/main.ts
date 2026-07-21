@@ -1,16 +1,18 @@
-import type { Color, Phase, PlayerView } from '../engine/index.js';
+import type { Color, GameResult, Phase, PlayerView } from '../engine/index.js';
 import type { CapturedRanks, LastMove, Role, ServerMsg, WatchView } from '../server/protocol.js';
 import { connect, loadSession } from './net/ws-client.js';
 import type { ConnStatus, Net } from './net/ws-client.js';
 import { render as renderLobby } from './screens/lobby.js';
 import { render as renderSetup } from './screens/setup.js';
+import { render as renderGame } from './screens/game.js';
 import { applyServerMsg, ensureStage } from './store-update.js';
 import type { Stage } from './board/stage.js';
 
 /**
  * Tiny app-wide store. Screens beyond the lobby read `lastView`/`captured`/`lastMove`/`moveLog`/
- * `setupStatus` to pick a phase-specific render; `renderRoomPlaceholder` below still covers
- * PLAY/GAME_OVER/spectator (Task 10) so two-tab manual testing works end-to-end.
+ * `setupStatus` to pick a phase-specific render; `renderRoomPlaceholder` below now only covers
+ * spectators during SETUP and the brief moment before the first SETUP_STATUS/VIEW arrives —
+ * SETUP routes to screens/setup.ts and PLAY/GAME_OVER route to screens/game.ts.
  *
  * `phase` is tracked separately from `lastView?.phase` because the server never actually sends a
  * VIEW while phase is SETUP (see game-room.ts: joinHuman/rejoin/commitSetup/doRematch all send
@@ -37,11 +39,25 @@ export interface Store {
   captured: CapturedRanks | null;
   lastMove: LastMove | null;
   moveLog: string[];
+  /** Bumped to `msg.seq` on every VIEW — screens/game.ts's reset trigger for its local
+   *  selection/resign-confirm/strike-overlay UI state, the same role `setupGen` plays for
+   *  screens/setup.ts's tap-tap selection. */
+  viewSeq: number;
+  /** Outbound ACTION counter — per-member `seq` must strictly increase (see game-room.ts's
+   *  `if (msg.seq <= member.lastSeq) return`), so this is bumped before every send, never reset. */
+  actionSeq: number;
   setupStatus: Record<Color, boolean> | null;
   stage: Stage | null;
   setupGen: number;
   setupLocked: boolean;
   setupError: string | null;
+  finalView: WatchView | null;
+  result: GameResult | null;
+  /** Roles that have voted to rematch this GAME_OVER; null before any REMATCH_STATE/GAME_OVER. */
+  rematchVotes: Role[] | null;
+  /** Live connectivity per seat, from OPPONENT_STATUS. Starts both-true; a spectator can see
+   *  either side flip, a seated player only ever sees their opponent's. */
+  connection: Record<Color, boolean>;
 }
 
 const appEl = document.getElementById('app');
@@ -64,11 +80,17 @@ const store: Store = {
   captured: null,
   lastMove: null,
   moveLog: [],
+  viewSeq: 0,
+  actionSeq: 0,
   setupStatus: null,
   stage: null,
   setupGen: 0,
   setupLocked: false,
   setupError: null,
+  finalView: null,
+  result: null,
+  rematchVotes: null,
+  connection: { RED: true, BLUE: true },
 };
 
 net.onStatus((s: ConnStatus) => {
@@ -90,9 +112,9 @@ net.onMsg((msg: ServerMsg) => {
   renderCurrentScreen();
 });
 
-/** Placeholder room screen for phases the web client doesn't have a real screen for yet — real
- *  play/watch screens land in Task 10. Setup has a real screen (below); this still covers it for
- *  spectators and the brief moment before the first SETUP_STATUS/VIEW arrives. */
+/** Placeholder room screen for the states with no phase-specific screen of their own: a
+ *  spectator during SETUP (screens/setup.ts is only for the seated RED/BLUE players), and the
+ *  brief moment before the first SETUP_STATUS/VIEW arrives for anyone. */
 function renderRoomPlaceholder(root: HTMLElement, s: Store): void {
   root.innerHTML = '';
   const section = document.createElement('section');
@@ -112,9 +134,7 @@ function renderRoomPlaceholder(root: HTMLElement, s: Store): void {
 
   const hint = document.createElement('p');
   hint.className = 'hint';
-  hint.textContent =
-    'Play/watch screens are pending (Task 10). This confirms the round trip: create or join ' +
-    'here, then in a second tab join with the same code and watch role + phase update.';
+  hint.textContent = 'Waiting for the game to start…';
   section.appendChild(hint);
 
   root.appendChild(section);
@@ -136,6 +156,8 @@ function renderCurrentScreen(): void {
     const isSetupParticipant = store.role === 'RED' || store.role === 'BLUE';
     if (store.phase === 'SETUP' && isSetupParticipant && store.stage) {
       renderSetup(app, store);
+    } else if (store.phase === 'PLAY' || store.phase === 'GAME_OVER') {
+      renderGame(app, store);
     } else {
       renderRoomPlaceholder(app, store);
     }

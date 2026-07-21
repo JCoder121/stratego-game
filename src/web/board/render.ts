@@ -1,5 +1,6 @@
 import { BOARD_SIZE, type Color, type Rank, type Square } from '../../engine/index.js';
 import { boardSquare, isLakeCell } from './geometry.js';
+import { RANK_GLYPH } from './glyphs.js';
 
 export interface BoardCallbacks {
   onSquareClick(sq: Square): void;
@@ -20,22 +21,10 @@ export interface BoardProps {
   lastMove?: { from: Square; to: Square } | null;
 }
 
-// Classic Stratego numbering — see task-8-brief.md. Exported so other screens (e.g. the setup
-// tray in screens/setup.ts) can render the same glyphs without duplicating this table.
-export const RANK_GLYPH: Record<Rank, string> = {
-  MARSHAL: '1',
-  GENERAL: '2',
-  COLONEL: '3',
-  MAJOR: '4',
-  CAPTAIN: '5',
-  LIEUTENANT: '6',
-  SERGEANT: '7',
-  MINER: '8',
-  SCOUT: '9',
-  SPY: 'S',
-  BOMB: 'B',
-  FLAG: 'F',
-};
+// Re-exported for existing importers (e.g. screens/setup.ts) — the table itself now lives in
+// glyphs.ts so screens/game.ts and store-update.ts can use it without pulling in this
+// DOM-rendering module.
+export { RANK_GLYPH };
 
 function keyOf(sq: Square): string {
   return `${sq.r},${sq.c}`;

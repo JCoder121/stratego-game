@@ -143,3 +143,70 @@
   opacity: 0.35;
   pointer-events: none;
 }
+
+/* Combat reveal overlay (Task 10) — screens/game.ts appends this on top of the target cell for
+   ~900ms after a strike, then re-renders without it. */
+.board .cell .strike-reveal {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3%;
+  border-radius: 4px;
+  background: rgba(10, 12, 15, 0.72);
+  animation: strike-pop 900ms ease-out;
+}
+
+.board .cell .strike-reveal .strike-glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38%;
+  aspect-ratio: 1;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: clamp(0.6rem, 2.2vmin, 0.95rem);
+  color: var(--piece-face);
+}
+
+.board .cell .strike-reveal .strike-glyph.red {
+  background: linear-gradient(160deg, var(--red-piece) 0%, var(--red-piece-dark) 100%);
+}
+
+.board .cell .strike-reveal .strike-glyph.blue {
+  background: linear-gradient(160deg, var(--blue-piece) 0%, var(--blue-piece-dark) 100%);
+}
+
+.board .cell .strike-reveal .strike-x {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: clamp(0.55rem, 1.8vmin, 0.8rem);
+}
+
+.board .cell .strike-reveal.outcome-attacker {
+  box-shadow: inset 0 0 0 3px #3ddc74;
+}
+
+.board .cell .strike-reveal.outcome-defender {
+  box-shadow: inset 0 0 0 3px #e0554c;
+}
+
+.board .cell .strike-reveal.outcome-both {
+  box-shadow: inset 0 0 0 3px var(--highlight-gold);
+}
+
+@keyframes strike-pop {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  20% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
