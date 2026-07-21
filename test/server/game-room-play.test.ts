@@ -240,6 +240,57 @@ describe('GameRoom play: resign + rematch', () => {
     expect(lastMsg(red.inbox)).toMatchObject({ t: 'GAME_OVER', result: { winner: 'BLUE', reason: 'RESIGN' } });
   });
 
+  it('rejoin after GAME_OVER re-sends GAME_OVER + REMATCH_STATE (not just a stale VIEW), so a refreshed player is not stranded on the placeholder', () => {
+    const room = new GameRoom({ mode: 'HUMAN_VS_HUMAN', scheduler: manualScheduler() });
+    const red = member();
+    const blue = member();
+    const redJoin = room.joinHuman(red.send)!;
+    const blueJoin = room.joinHuman(blue.send)!;
+    setupBoth(room, redJoin.token, blueJoin.token, 'balanced');
+    room.handle(redJoin.token, { t: 'ACTION', action: { type: 'RESIGN', color: 'RED' }, seq: 1 });
+    room.handle(blueJoin.token, { t: 'REMATCH_REQUEST' }); // one vote pending, so the resend below has something to carry
+
+    room.disconnect(redJoin.token);
+    const refreshedRed = member();
+    const role = room.rejoin(redJoin.token, refreshedRed.send);
+    expect(role).toBe('RED');
+
+    // Both the plain VIEW (sent first, matching non-GAME_OVER rejoin behavior) and a fresh
+    // GAME_OVER + REMATCH_STATE (the actual fix) must be present, in that order.
+    const types = refreshedRed.inbox.map((m) => m.t);
+    const viewIdx = types.indexOf('VIEW');
+    const overIdx = types.indexOf('GAME_OVER');
+    const rematchIdx = types.indexOf('REMATCH_STATE');
+    expect(viewIdx).toBeGreaterThanOrEqual(0);
+    expect(overIdx).toBeGreaterThan(viewIdx);
+    expect(rematchIdx).toBeGreaterThan(overIdx);
+
+    const over = refreshedRed.inbox[overIdx]!;
+    expect(over).toMatchObject({ t: 'GAME_OVER', result: { winner: 'BLUE', reason: 'RESIGN' } });
+    if (over.t !== 'GAME_OVER') throw new Error('expected GAME_OVER');
+    expect(over.finalView.result).toEqual({ winner: 'BLUE', reason: 'RESIGN' });
+    expect(over.finalView.pieces.length).toBeGreaterThan(0); // real WatchView, not an empty stub
+
+    const rematch = refreshedRed.inbox[rematchIdx]!;
+    expect(rematch).toMatchObject({ t: 'REMATCH_STATE', votes: ['BLUE'] }); // BLUE's earlier vote survived
+  });
+
+  it('rejoin mid-game (not GAME_OVER) does not send a spurious GAME_OVER/REMATCH_STATE', () => {
+    const room = new GameRoom({ mode: 'HUMAN_VS_HUMAN', scheduler: manualScheduler() });
+    const red = member();
+    const blue = member();
+    const redJoin = room.joinHuman(red.send)!;
+    const blueJoin = room.joinHuman(blue.send)!;
+    setupBoth(room, redJoin.token, blueJoin.token, 'balanced');
+
+    room.disconnect(redJoin.token);
+    const refreshedRed = member();
+    room.rejoin(redJoin.token, refreshedRed.send);
+
+    expect(refreshedRed.inbox.some((m) => m.t === 'GAME_OVER')).toBe(false);
+    expect(refreshedRed.inbox.some((m) => m.t === 'REMATCH_STATE')).toBe(false);
+  });
+
   it('REMATCH_REQUEST: one vote -> REMATCH_STATE; both votes -> fresh SETUP views, votes cleared', () => {
     const room = new GameRoom({ mode: 'HUMAN_VS_HUMAN', scheduler: manualScheduler() });
     const red = member();

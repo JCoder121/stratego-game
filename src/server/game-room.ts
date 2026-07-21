@@ -151,6 +151,18 @@ export class GameRoom {
     } else {
       send(this.viewMsg(m.role));
     }
+    // A rejoin after GAME_OVER only got a stale VIEW above (phase is GAME_OVER, not PLAY, so the
+    // client's placeholder never resolves) — re-send the GAME_OVER + any pending rematch votes so
+    // a refreshed player lands on the actual result screen instead of being stranded.
+    if (this.state.phase === 'GAME_OVER' && this.state.result) {
+      send({
+        t: 'GAME_OVER',
+        result: this.state.result,
+        finalView: watchView(this.state),
+        captured: capturedRanks(this.state),
+      });
+      send({ t: 'REMATCH_STATE', votes: [...this.rematchVotes] });
+    }
     if (m.role === 'RED' || m.role === 'BLUE') this.notifyOpponentStatus(m.role, true);
     this.opts.onEmptyChange?.(false);
     return m.role;
