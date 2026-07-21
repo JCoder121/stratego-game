@@ -204,7 +204,7 @@ export async function startServer(opts: StartServerOpts): Promise<StartedServer>
 
 const isMain = import.meta.url === `file://${process.argv[1]}`;
 if (isMain) {
-  const port = Number(process.env.PORT ?? 8080);
+  const port = Number(process.env.PORT ?? 3000);
   startServer({ port, distDir: resolveDistDir(), host: '0.0.0.0' }).then(({ port: actualPort }) => {
     // eslint-disable-next-line no-console
     console.log(`Stratego server listening on 0.0.0.0:${actualPort}`);
