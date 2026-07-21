@@ -6,6 +6,9 @@ export type BotKind = 'random' | 'heuristic';
 export type WatchSpeed = 500 | 1000 | 'step';
 export type Role = Color | 'SPECTATOR';
 
+/** Play-phase actions only (MOVE/RESIGN); setup actions use COMMIT_SETUP. */
+export type PlayAction = Extract<Action, { type: 'MOVE' } | { type: 'RESIGN' }>;
+
 /** All-revealed view for spectators and game-over broadcast. */
 export interface WatchView {
   phase: Phase;
@@ -30,7 +33,7 @@ export type ClientMsg =
   | { t: 'JOIN_ROOM'; code: string }
   | { t: 'REJOIN'; code: string; token: string }
   | { t: 'COMMIT_SETUP'; placement: [PieceId, Square][] }
-  | { t: 'ACTION'; action: Action; seq: number }        // MOVE / RESIGN only; setup goes via COMMIT_SETUP
+  | { t: 'ACTION'; action: PlayAction; seq: number }
   | { t: 'REMATCH_REQUEST' }
   | { t: 'WATCH_CONTROL'; control: 'play' | 'pause' | 'step' | 'speed'; speed?: WatchSpeed };
 
@@ -54,7 +57,7 @@ export function isClientMsg(x: unknown): x is ClientMsg {
     case 'JOIN_ROOM': return typeof m.code === 'string';
     case 'REJOIN': return typeof m.code === 'string' && typeof m.token === 'string';
     case 'COMMIT_SETUP': return Array.isArray(m.placement);
-    case 'ACTION': return typeof m.action === 'object' && m.action !== null && typeof m.seq === 'number';
+    case 'ACTION': return typeof m.action === 'object' && m.action !== null && typeof m.seq === 'number' && ((m.action as { type?: unknown }).type === 'MOVE' || (m.action as { type?: unknown }).type === 'RESIGN');
     case 'CREATE_ROOM': return typeof m.mode === 'string';
     default: return true;
   }

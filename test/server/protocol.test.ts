@@ -18,10 +18,15 @@ describe('isClientMsg', () => {
   it('accepts valid messages', () => {
     expect(isClientMsg({ t: 'JOIN_ROOM', code: 'K3PXQ' })).toBe(true);
     expect(isClientMsg({ t: 'ACTION', action: { type: 'RESIGN', color: 'RED' }, seq: 1 })).toBe(true);
+    expect(isClientMsg({ t: 'ACTION', action: { type: 'MOVE', color: 'RED', from: { r: 0, c: 0 }, to: { r: 1, c: 0 } }, seq: 2 })).toBe(true);
   });
   it('rejects garbage', () => {
     expect(isClientMsg(null)).toBe(false);
     expect(isClientMsg({ t: 'NOPE' })).toBe(false);
     expect(isClientMsg({ t: 'JOIN_ROOM' })).toBe(false);
+  });
+  it('rejects ACTION with setup actions', () => {
+    expect(isClientMsg({ t: 'ACTION', action: { type: 'SETUP_DONE', color: 'RED' }, seq: 1 })).toBe(false);
+    expect(isClientMsg({ t: 'ACTION', action: { type: 'SETUP_PLACE', color: 'RED', pieceId: 'RED-SCOUT-1', to: { r: 0, c: 0 } }, seq: 1 })).toBe(false);
   });
 });
