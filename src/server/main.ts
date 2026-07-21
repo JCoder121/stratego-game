@@ -37,6 +37,7 @@ interface Attachment {
   room: GameRoom;
   token: string;
   epoch: symbol;
+  code: string;
 }
 
 function resolveDistDir(): string {
@@ -104,71 +105,85 @@ export async function startServer(opts: StartServerOpts): Promise<StartedServer>
       }
       const msg: ClientMsg = parsed;
 
-      if (msg.t === 'CREATE_ROOM') {
-        let code = '';
-        const room = new GameRoom({
-          mode: msg.mode,
-          bots: msg.bots ?? (msg.botDifficulty !== undefined
-            ? { RED: msg.botDifficulty, BLUE: msg.botDifficulty }
-            : undefined),
-          watchSpeed: msg.watchSpeed,
-          scheduler: { set: setTimeout, clear: clearTimeout },
-          onEmptyChange: (empty) => {
-            if (empty) registry.markEmpty(code);
-            else registry.markOccupied(code);
-          },
-        });
-        code = registry.create(room);
-        const joined = room.joinHuman(send);
-        if (!joined) {
-          sendErr('ROOM_FULL', 'room is full');
+      // Defense-in-depth: isClientMsg is the primary guard against malformed payloads, but a
+      // shape it lets through (or a bug in a handler) must never crash the whole process — one
+      // bad message on one socket should degrade to a BAD_MSG reply, not take down every room.
+      try {
+        if (msg.t === 'CREATE_ROOM') {
+          let code = '';
+          const room = new GameRoom({
+            mode: msg.mode,
+            bots: msg.bots ?? (msg.botDifficulty !== undefined
+              ? { RED: msg.botDifficulty, BLUE: msg.botDifficulty }
+              : undefined),
+            watchSpeed: msg.watchSpeed,
+            scheduler: { set: setTimeout, clear: clearTimeout },
+            onEmptyChange: (empty) => {
+              if (empty) registry.markEmpty(code);
+              else registry.markOccupied(code);
+            },
+          });
+          code = registry.create(room);
+          const joined = room.joinHuman(send);
+          if (!joined) {
+            sendErr('ROOM_FULL', 'room is full');
+            return;
+          }
+          attached = { room, token: joined.token, epoch: claim(room, joined.token), code };
+          send({ t: 'ROOM_CREATED', code, token: joined.token, role: joined.role });
           return;
         }
-        attached = { room, token: joined.token, epoch: claim(room, joined.token) };
-        send({ t: 'ROOM_CREATED', code, token: joined.token, role: joined.role });
-        return;
-      }
 
-      if (msg.t === 'JOIN_ROOM') {
-        const code = msg.code.toUpperCase();
-        const room = registry.get(code);
-        if (!room) {
-          sendErr('NO_ROOM', 'no such room');
+        if (msg.t === 'JOIN_ROOM') {
+          const code = msg.code.toUpperCase();
+          const room = registry.get(code);
+          if (!room) {
+            sendErr('NO_ROOM', 'no such room');
+            return;
+          }
+          const joined = room.joinHuman(send);
+          if (!joined) {
+            sendErr('ROOM_FULL', 'room is full');
+            return;
+          }
+          attached = { room, token: joined.token, epoch: claim(room, joined.token), code };
+          send({ t: 'JOINED', code, token: joined.token, role: joined.role });
           return;
         }
-        const joined = room.joinHuman(send);
-        if (!joined) {
-          sendErr('ROOM_FULL', 'room is full');
-          return;
-        }
-        attached = { room, token: joined.token, epoch: claim(room, joined.token) };
-        send({ t: 'JOINED', code, token: joined.token, role: joined.role });
-        return;
-      }
 
-      if (msg.t === 'REJOIN') {
-        const code = msg.code.toUpperCase();
-        const room = registry.get(code);
-        if (!room) {
-          sendErr('NO_ROOM', 'no such room');
+        if (msg.t === 'REJOIN') {
+          const code = msg.code.toUpperCase();
+          const room = registry.get(code);
+          if (!room) {
+            sendErr('NO_ROOM', 'no such room');
+            return;
+          }
+          const role = room.rejoin(msg.token, send);
+          if (role === null) {
+            sendErr('BAD_TOKEN', 'invalid token');
+            return;
+          }
+          // room.rejoin already pushed a fresh VIEW/SETUP_STATUS to `send` and notified the
+          // opponent; only the epoch bookkeeping happens here.
+          attached = { room, token: msg.token, epoch: claim(room, msg.token), code };
           return;
         }
-        const role = room.rejoin(msg.token, send);
-        if (role === null) {
-          sendErr('BAD_TOKEN', 'invalid token');
-          return;
-        }
-        // room.rejoin already pushed a fresh VIEW/SETUP_STATUS to `send` and notified the
-        // opponent; only the epoch bookkeeping happens here.
-        attached = { room, token: msg.token, epoch: claim(room, msg.token) };
-        return;
-      }
 
-      if (!attached) {
-        sendErr('BAD_MSG', 'not joined to a room');
-        return;
+        if (!attached) {
+          sendErr('BAD_MSG', 'not joined to a room');
+          return;
+        }
+        // Refresh idle-sweep activity on every in-room message, not just create/get/rejoin —
+        // otherwise a long-running live game whose players never re-JOIN/REJOIN (e.g. hours of
+        // ACTION/COMMIT_SETUP traffic) goes untouched in the registry and gets idle-swept out
+        // from under active players.
+        registry.touch(attached.code);
+        attached.room.handle(attached.token, msg);
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error('unhandled error dispatching client message', e);
+        sendErr('BAD_MSG', 'internal error handling message');
       }
-      attached.room.handle(attached.token, msg);
     });
 
     ws.on('close', () => {
