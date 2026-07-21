@@ -5,7 +5,7 @@ import type { Store } from '../main.js';
 import type { Color, GameResult, PlayerView, Rank, Square } from '../../engine/index.js';
 import { RANKS } from '../../engine/index.js';
 import type { LastMove, Role } from '../../server/protocol.js';
-import { renderBoard, type BoardPiece } from '../board/render.js';
+import { renderBoard } from '../board/render.js';
 import { displayCell } from '../board/geometry.js';
 import { RANK_GLYPH } from '../board/glyphs.js';
 import { destinationsFrom } from '../game-logic.js';
