@@ -140,3 +140,102 @@ input[name='join-code'] {
 .room-placeholder p {
   margin: 0.15rem 0;
 }
+
+.setup-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.setup-board-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.setup-opponent-status {
+  text-align: center;
+}
+
+.setup-error {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.setup-tray-col h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+}
+
+.setup-tray {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 0.5rem;
+}
+
+.tray-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.5rem 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.tray-tile.red {
+  border-color: var(--red-piece);
+}
+
+.tray-tile.blue {
+  border-color: var(--blue-piece);
+}
+
+.tray-tile .rank-glyph {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.tray-tile-label {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.tray-tile-count {
+  font-size: 0.72rem;
+}
+
+.tray-tile.selected {
+  box-shadow: inset 0 0 0 2px var(--highlight-gold);
+}
+
+.tray-tile:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.setup-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+
+.setup-controls button:disabled,
+.setup-controls select:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.setup-ready {
+  margin-left: auto;
+}

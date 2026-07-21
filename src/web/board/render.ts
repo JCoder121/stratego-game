@@ -20,8 +20,9 @@ export interface BoardProps {
   lastMove?: { from: Square; to: Square } | null;
 }
 
-// Classic Stratego numbering — see task-8-brief.md.
-const RANK_GLYPH: Record<Rank, string> = {
+// Classic Stratego numbering — see task-8-brief.md. Exported so other screens (e.g. the setup
+// tray in screens/setup.ts) can render the same glyphs without duplicating this table.
+export const RANK_GLYPH: Record<Rank, string> = {
   MARSHAL: '1',
   GENERAL: '2',
   COLONEL: '3',

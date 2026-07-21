@@ -135,3 +135,11 @@
   outline: 2px solid rgba(255, 255, 255, 0.5);
   outline-offset: -2px;
 }
+
+/* Setup screen (Task 9): squares outside the viewer's own setup rows are non-interactive —
+   pointer-events: none means they never receive click/dragover/drop, on top of screens/setup.ts
+   only wiring drag handlers on own-row cells to begin with. */
+.board .cell.setup-dim {
+  opacity: 0.35;
+  pointer-events: none;
+}
