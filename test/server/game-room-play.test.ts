@@ -2,18 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { BOT_DELAY_MS, GameRoom } from '../../src/server/game-room.js';
 import { presetNames } from '../../src/engine/index.js';
 import type { Bot } from '../../src/bots/types.js';
-import { fullPlacement, lastMsg, manualScheduler, member, placementWithOverrides } from './helpers.js';
-
-const RANK_ID = '(MARSHAL|GENERAL|COLONEL|MAJOR|CAPTAIN|LIEUTENANT|SERGEANT|MINER|SCOUT|SPY|BOMB|FLAG)';
-// A recipient's own real piece ids are expected (viewFor reveals them by design); only the
-// *enemy* color's real-id pattern must never leak into that recipient's messages.
-function enemyIdPattern(recipientColor: 'RED' | 'BLUE'): RegExp {
-  const enemy = recipientColor === 'RED' ? 'BLUE' : 'RED';
-  return new RegExp(`${enemy}-${RANK_ID}-`);
-}
-// GAME_OVER's finalView is always a WatchView (all-revealed, no ids at all, by construction) —
-// so unlike a player VIEW, no real id of *either* color should ever appear in a GAME_OVER message.
-const ANY_REAL_ID_PATTERN = new RegExp(`(RED|BLUE)-${RANK_ID}-`);
+import {
+  ANY_REAL_ID_PATTERN, enemyIdPattern, fullPlacement, lastMsg, manualScheduler, member, placementWithOverrides,
+} from './helpers.js';
 
 function setupBoth(room: GameRoom, redToken: string, blueToken: string, presetName: string): void {
   room.handle(redToken, { t: 'COMMIT_SETUP', placement: fullPlacement('RED', presetName) });

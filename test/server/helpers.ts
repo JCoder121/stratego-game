@@ -1,8 +1,20 @@
 import {
-  presetNames, presetPlacement, rosterPieceIds, setupSquares, type Color, type PieceId, type Square,
+  RANKS, presetNames, presetPlacement, rosterPieceIds, setupSquares, type Color, type PieceId, type Square,
 } from '../../src/engine/index.js';
 import type { Scheduler } from '../../src/server/game-room.js';
 import type { ServerMsg } from '../../src/server/protocol.js';
+
+const RANK_ID = `(${RANKS.join('|')})`;
+/** A recipient's own real piece ids are expected (viewFor reveals them by design); only the
+ * *enemy* color's real-id pattern must never leak into that recipient's messages. */
+export function enemyIdPattern(recipientColor: Color): RegExp {
+  const enemy = recipientColor === 'RED' ? 'BLUE' : 'RED';
+  return new RegExp(`${enemy}-${RANK_ID}-`);
+}
+/** GAME_OVER's finalView is always a WatchView (all-revealed, no ids at all, by construction) —
+ * so unlike a player VIEW, no real id of *either* color should ever appear in a GAME_OVER message
+ * (or in any message sent to a pure spectator, who never holds a PlayerView). */
+export const ANY_REAL_ID_PATTERN = new RegExp(`(RED|BLUE)-${RANK_ID}-`);
 
 export function member() {
   const inbox: ServerMsg[] = [];
