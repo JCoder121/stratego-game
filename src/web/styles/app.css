@@ -392,3 +392,16 @@ input[name='join-code'] {
   align-items: center;
   gap: 0.4rem;
 }
+
+/* Watch screen (Task 11) transport strip — play/pause/step + speed, above the move log. */
+.watch-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.watch-controls button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

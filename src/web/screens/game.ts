@@ -2,21 +2,16 @@
 // all rules logic (legal destinations) lives in ../game-logic.ts; this module only ever reads
 // store.lastView/finalView/etc and turns clicks into `net.send` calls.
 import type { Store } from '../main.js';
-import type { Color, GameResult, PlayerView, Rank, Square } from '../../engine/index.js';
-import { RANKS } from '../../engine/index.js';
-import type { LastMove, Role } from '../../server/protocol.js';
+import type { Color, PlayerView, Square } from '../../engine/index.js';
+import type { LastMove } from '../../server/protocol.js';
 import { renderBoard } from '../board/render.js';
 import { displayCell } from '../board/geometry.js';
 import { RANK_GLYPH } from '../board/glyphs.js';
 import { destinationsFrom } from '../game-logic.js';
-
-const REASON_COPY: Record<GameResult['reason'], string> = {
-  FLAG_CAPTURED: 'Flag captured!',
-  NO_MOVES: 'No legal moves',
-  RESIGN: 'Resignation',
-  PLY_CAP: 'Draw — move limit',
-  DEAD_POSITION: 'Draw — dead position',
-};
+import {
+  appendMoveLog, disconnectBannerText, other, renderCapturedTray, resultBanner, roleLabel,
+  turnBannerText,
+} from './shared.js';
 
 // ---- Module-level UI state -------------------------------------------------------------------
 // Mirrors screens/setup.ts's tap-tap-selection pattern: this has to survive re-renders triggered
@@ -31,16 +26,6 @@ let localGen = -1;
 // whether to animate; `overlayActive` is true only while the 900ms reveal is on screen.
 let animatedForSeq = -1;
 let overlayActive = false;
-
-function roleLabel(role: Role): string {
-  if (role === 'RED') return 'Red';
-  if (role === 'BLUE') return 'Blue';
-  return 'Spectator';
-}
-
-function other(color: Color): Color {
-  return color === 'RED' ? 'BLUE' : 'RED';
-}
 
 function sameSquare(a: Square, b: Square): boolean {
   return a.r === b.r && a.c === b.c;
@@ -183,83 +168,6 @@ function onBoardClick(root: HTMLElement, store: Store, sq: Square): void {
   render(root, store);
 }
 
-function turnBannerText(store: Store, turn: Color): string {
-  if (store.role === 'RED' || store.role === 'BLUE') {
-    return turn === store.role ? 'Your move' : "Opponent's move";
-  }
-  return `${turn === 'RED' ? 'Red' : 'Blue'} to move`;
-}
-
-function disconnectBannerText(store: Store): string | null {
-  if (store.role === 'RED' || store.role === 'BLUE') {
-    const opp = other(store.role);
-    if (!store.connection[opp]) {
-      return `${roleLabel(opp)} disconnected — waiting to reconnect…`;
-    }
-    return null;
-  }
-  const down = (['RED', 'BLUE'] as const).filter((c) => !store.connection[c]);
-  if (down.length === 0) return null;
-  return `${down.map(roleLabel).join(' and ')} disconnected — waiting to reconnect…`;
-}
-
-function renderCapturedTray(label: string, ranks: Rank[], color: Color): HTMLElement {
-  const wrap = document.createElement('div');
-  wrap.className = 'tray';
-
-  const heading = document.createElement('h3');
-  heading.textContent = label;
-  wrap.appendChild(heading);
-
-  if (ranks.length === 0) {
-    const empty = document.createElement('p');
-    empty.className = 'hint';
-    empty.textContent = 'None yet';
-    wrap.appendChild(empty);
-    return wrap;
-  }
-
-  const grid = document.createElement('div');
-  grid.className = 'tray-grid';
-  wrap.appendChild(grid);
-
-  const byRank = new Map<Rank, number>();
-  for (const r of ranks) byRank.set(r, (byRank.get(r) ?? 0) + 1);
-  for (const rank of RANKS) {
-    const count = byRank.get(rank);
-    if (!count) continue;
-    const chip = document.createElement('span');
-    chip.className = `tray-chip ${color === 'RED' ? 'red' : 'blue'}`;
-    chip.textContent = count > 1 ? `${RANK_GLYPH[rank]}×${count}` : RANK_GLYPH[rank];
-    grid.appendChild(chip);
-  }
-  return wrap;
-}
-
-/** Builds the move-log panel and appends it to `sidebar` (which must already be attached to the
- *  live document — see call sites, both of which attach `sidebar` to `layout`/`root` before
- *  calling this). `scrollHeight` reads 0 on a detached element, so the "keep newest move in view"
- *  scroll has to happen after attaching, not while building the list in isolation. */
-function appendMoveLog(sidebar: HTMLElement, entries: string[]): void {
-  const wrap = document.createElement('div');
-  wrap.className = 'move-log';
-
-  const heading = document.createElement('h3');
-  heading.textContent = 'Moves';
-  wrap.appendChild(heading);
-
-  const list = document.createElement('ul');
-  list.className = 'move-log-list';
-  for (const entry of entries) {
-    const li = document.createElement('li');
-    li.textContent = entry;
-    list.appendChild(li);
-  }
-  wrap.appendChild(list);
-  sidebar.appendChild(wrap);
-  list.scrollTop = list.scrollHeight;
-}
-
 function renderResignControl(sidebar: HTMLElement, store: Store, root: HTMLElement): void {
   const wrap = document.createElement('div');
   wrap.className = 'resign-control';
@@ -338,11 +246,6 @@ function applyStrikeOverlay(boardWrap: HTMLElement, lastMove: LastMove, viewer: 
   overlay.appendChild(defender);
 
   cellEl.appendChild(overlay);
-}
-
-function resultBanner(result: GameResult): string {
-  const copy = REASON_COPY[result.reason];
-  return result.winner ? `${roleLabel(result.winner)} wins — ${copy}` : copy;
 }
 
 function renderGameOver(root: HTMLElement, store: Store): void {

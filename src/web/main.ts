@@ -5,6 +5,7 @@ import type { ConnStatus, Net } from './net/ws-client.js';
 import { render as renderLobby } from './screens/lobby.js';
 import { render as renderSetup } from './screens/setup.js';
 import { render as renderGame } from './screens/game.js';
+import { render as renderWatch } from './screens/watch.js';
 import { applyServerMsg, ensureStage } from './store-update.js';
 import type { Stage } from './board/stage.js';
 
@@ -170,7 +171,11 @@ function renderCurrentScreen(): void {
     if (store.phase === 'SETUP' && isSetupParticipant && store.stage) {
       renderSetup(app, store);
     } else if (store.phase === 'PLAY' || store.phase === 'GAME_OVER') {
-      renderGame(app, store);
+      if (store.role === 'SPECTATOR') {
+        renderWatch(app, store);
+      } else {
+        renderGame(app, store);
+      }
     } else {
       renderRoomPlaceholder(app, store);
     }
