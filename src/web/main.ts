@@ -97,6 +97,12 @@ function renderRoomPlaceholder(root: HTMLElement, s: Store): void {
 
 function renderCurrentScreen(): void {
   const hash = location.hash || '#/';
+  if (import.meta.env.DEV && hash.startsWith('#/dev-board')) {
+    // Dev-only scratch route (Task 8 manual sanity check) — dynamic import keeps devBoard.ts and
+    // its sample fixtures out of the production bundle entirely.
+    void import('./screens/devBoard.js').then(({ render }) => render(app));
+    return;
+  }
   if (hash.startsWith('#/room') && store.code) {
     renderRoomPlaceholder(app, store);
   } else {
