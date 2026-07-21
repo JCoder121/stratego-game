@@ -346,11 +346,16 @@ function resultBanner(result: GameResult): string {
 }
 
 function renderGameOver(root: HTMLElement, store: Store): void {
-  root.textContent = '';
   const finalView = store.finalView;
   const result = store.result;
-  if (!finalView || !result) return; // GAME_OVER always sets both together — see store-update.ts
+  // The VIEW carrying `view.phase: 'GAME_OVER'` (which is what flips store.phase and routes here)
+  // arrives *before* the separate GAME_OVER message that sets finalView/result (see
+  // game-room.ts's applyChecked: broadcastViews then broadcastGameOver). Leave whatever was
+  // already on screen — the last PLAY-phase board — up rather than blanking `root` for that one
+  // render; the GAME_OVER message (and its own render() call) follows within the same tick.
+  if (!finalView || !result) return;
 
+  root.textContent = '';
   const layout = document.createElement('div');
   layout.className = 'game-layout';
   root.appendChild(layout);

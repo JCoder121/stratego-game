@@ -34,7 +34,7 @@ export function applyServerMsg(store: Store, msg: ServerMsg): void {
       store.code = msg.code;
       saveSession(msg.code, msg.token, msg.role);
       break;
-    case 'VIEW':
+    case 'VIEW': {
       store.phase = msg.view.phase;
       store.lastView = msg.view;
       store.captured = msg.captured;
@@ -42,11 +42,19 @@ export function applyServerMsg(store: Store, msg: ServerMsg): void {
       store.viewSeq = msg.seq;
       // lastMove is only ever set on the broadcast immediately following a real MOVE
       // (game-room.ts's applyChecked → broadcastViews(this.buildLastMove(...))) — join, rejoin,
-      // setup-completion and rematch all broadcast with `lastMove: undefined` — so appending here
-      // is exactly one moveLog entry per real ply, with no dedup needed.
+      // setup-completion and rematch all broadcast with `lastMove: undefined`. Number entries by
+      // the VIEW's own `plyCount` rather than `moveLog.length + 1`: the latter silently renumbers
+      // from 1 after any gap (moves made while we were disconnected are never individually seen),
+      // while plyCount stays truthful. When a lastMove-less VIEW (a rejoin resend) shows plyCount
+      // jumped by more than one ply since we last knew, insert a neutral divider so the gap is
+      // visible instead of silently absent.
+      const ply = msg.view.plyCount;
       if (msg.lastMove) {
-        store.moveLog = [...store.moveLog, formatMoveLogEntry(store.moveLog.length + 1, msg.lastMove)];
+        store.moveLog = [...store.moveLog, formatMoveLogEntry(ply, msg.lastMove)];
+      } else if (store.lastPlyLogged !== null && ply - store.lastPlyLogged > 1) {
+        store.moveLog = [...store.moveLog, RECONNECT_DIVIDER];
       }
+      store.lastPlyLogged = ply;
       // The server only ever sends VIEW for PLAY/GAME_OVER (SETUP is signaled by SETUP_STATUS
       // instead — see game-room.ts), so this is really "we just left SETUP". Nulling the stage
       // here (rather than only building a fresh one on next entry) is what makes rematch's fresh
@@ -54,6 +62,7 @@ export function applyServerMsg(store: Store, msg: ServerMsg): void {
       // SETUP, `ensureStage` finds `store.stage === null` and rebuilds regardless of message order.
       if (store.phase !== 'SETUP') store.stage = null;
       break;
+    }
     case 'SETUP_STATUS':
       store.phase = 'SETUP';
       store.setupStatus = msg.ready;
@@ -67,6 +76,7 @@ export function applyServerMsg(store: Store, msg: ServerMsg): void {
       store.finalView = null;
       store.result = null;
       store.rematchVotes = null;
+      store.lastPlyLogged = null;
       break;
     case 'GAME_OVER':
       store.phase = 'GAME_OVER';
@@ -94,6 +104,10 @@ export function applyServerMsg(store: Store, msg: ServerMsg): void {
   }
   ensureStage(store);
 }
+
+/** Inserted into moveLog in place of the moves we missed while disconnected — see the VIEW case's
+ *  gap-detection comment above. */
+const RECONNECT_DIVIDER = '— reconnected —';
 
 /** `${n}. e4→e5` (plus an ` ⚔ 7×5` rank-glyph suffix when the move was an attack) — see the VIEW
  *  case above for why this only ever runs once per real ply. */

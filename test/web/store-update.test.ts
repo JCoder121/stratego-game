@@ -45,6 +45,7 @@ function makeStore(): Store {
     result: null,
     rematchVotes: null,
     connection: { RED: true, BLUE: true },
+    lastPlyLogged: null,
   };
 }
 
@@ -139,36 +140,41 @@ describe('ensureStage', () => {
 });
 
 describe('applyServerMsg — moveLog', () => {
-  function playView(seq: number, lastMove?: LastMove): ServerMsg {
+  // `seq` (the room's broadcast counter, drives store.viewSeq) and `plyCount` (drives move-log
+  // numbering) are two independent counters on the wire — kept as separate params so tests can't
+  // accidentally conflate them.
+  function playView(seq: number, plyCount: number, lastMove?: LastMove): ServerMsg {
     return {
       t: 'VIEW',
-      view: { viewer: 'RED', phase: 'PLAY', turn: 'RED', plyCount: 0, pieces: [], result: null, myRecentMoves: {} },
+      view: { viewer: 'RED', phase: 'PLAY', turn: 'RED', plyCount, pieces: [], result: null, myRecentMoves: {} },
       captured: { RED: [], BLUE: [] },
       lastMove,
       seq,
     };
   }
 
-  it('does not append when a VIEW carries no lastMove (e.g. PLAY_STARTED)', () => {
+  it('does not append when a VIEW carries no lastMove (e.g. PLAY_STARTED), but still tracks plyCount', () => {
     const store = makeStore();
-    applyServerMsg(store, playView(1));
+    applyServerMsg(store, playView(1, 0));
     expect(store.moveLog).toEqual([]);
     expect(store.viewSeq).toBe(1);
+    expect(store.lastPlyLogged).toBe(0);
   });
 
-  it('appends a plain move as "<n>. <fromAlg>→<toAlg>"', () => {
+  it('appends a plain move as "<n>. <fromAlg>→<toAlg>", numbered by plyCount', () => {
     const store = makeStore();
     // e2 (r=8,c=4) -> e3 (r=7,c=4) in engine coords (row 9 = rank 1, col a=0..j=9).
-    applyServerMsg(store, playView(1, { from: { r: 8, c: 4 }, to: { r: 7, c: 4 }, by: 'RED' }));
+    applyServerMsg(store, playView(1, 1, { from: { r: 8, c: 4 }, to: { r: 7, c: 4 }, by: 'RED' }));
     expect(store.moveLog).toEqual(['1. e2→e3']);
+    expect(store.lastPlyLogged).toBe(1);
   });
 
   it('appends a strike with a rank-glyph suffix, and keeps numbering across multiple moves', () => {
     const store = makeStore();
-    applyServerMsg(store, playView(1, { from: { r: 8, c: 4 }, to: { r: 7, c: 4 }, by: 'RED' }));
+    applyServerMsg(store, playView(1, 1, { from: { r: 8, c: 4 }, to: { r: 7, c: 4 }, by: 'RED' }));
     applyServerMsg(
       store,
-      playView(2, {
+      playView(2, 2, {
         from: { r: 1, c: 4 },
         to: { r: 7, c: 4 },
         by: 'BLUE',
@@ -177,6 +183,34 @@ describe('applyServerMsg — moveLog', () => {
     );
     expect(store.moveLog).toEqual(['1. e2→e3', '2. e9→e3 ⚔ 7×1']);
     expect(store.viewSeq).toBe(2);
+  });
+
+  it('numbers by plyCount, not moveLog.length — a gap does not renumber later moves back to a low count', () => {
+    const store = makeStore();
+    applyServerMsg(store, playView(1, 1, { from: { r: 8, c: 4 }, to: { r: 7, c: 4 }, by: 'RED' }));
+    // Plies 2-4 happened while we were disconnected and are never individually seen; the rejoin
+    // resend (lastMove absent) jumps straight to plyCount 4.
+    applyServerMsg(store, playView(2, 4));
+    // The next real move is ply 5 — must be numbered "5.", not "2." (moveLog.length was 1).
+    applyServerMsg(store, playView(3, 5, { from: { r: 1, c: 4 }, to: { r: 6, c: 4 }, by: 'BLUE' }));
+    expect(store.moveLog).toEqual(['1. e2→e3', '— reconnected —', '5. e9→e4']);
+  });
+
+  it('does not insert a divider for a normal +1 lastMove-less VIEW (none occurs in practice, but the boundary must not false-positive)', () => {
+    const store = makeStore();
+    applyServerMsg(store, playView(1, 1, { from: { r: 8, c: 4 }, to: { r: 7, c: 4 }, by: 'RED' }));
+    applyServerMsg(store, playView(2, 2)); // hypothetical lastMove-less VIEW one ply later
+    expect(store.moveLog).toEqual(['1. e2→e3']); // no divider — gap is exactly 1, not >1
+    expect(store.lastPlyLogged).toBe(2);
+  });
+
+  it('does not insert a divider on the very first VIEW of a session, even mid-game (a fresh join/spectator)', () => {
+    const store = makeStore();
+    // First VIEW this store has ever seen is already at plyCount 12 (joined mid-game) — nothing
+    // to compare against yet, so no spurious "reconnected" divider on a normal join.
+    applyServerMsg(store, playView(1, 12));
+    expect(store.moveLog).toEqual([]);
+    expect(store.lastPlyLogged).toBe(12);
   });
 });
 
@@ -234,6 +268,7 @@ describe('applyServerMsg — GAME_OVER / REMATCH_STATE / OPPONENT_STATUS', () =>
     store.result = { winner: 'RED', reason: 'FLAG_CAPTURED' };
     store.rematchVotes = ['RED', 'BLUE'];
     store.role = 'RED';
+    store.lastPlyLogged = 40;
 
     applyServerMsg(store, { t: 'SETUP_STATUS', ready: { RED: false, BLUE: false } });
 
@@ -243,5 +278,6 @@ describe('applyServerMsg — GAME_OVER / REMATCH_STATE / OPPONENT_STATUS', () =>
     expect(store.finalView).toBeNull();
     expect(store.result).toBeNull();
     expect(store.rematchVotes).toBeNull();
+    expect(store.lastPlyLogged).toBeNull();
   });
 });

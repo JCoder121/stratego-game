@@ -44,7 +44,11 @@ export interface Store {
    *  screens/setup.ts's tap-tap selection. */
   viewSeq: number;
   /** Outbound ACTION counter — per-member `seq` must strictly increase (see game-room.ts's
-   *  `if (msg.seq <= member.lastSeq) return`), so this is bumped before every send, never reset. */
+   *  `if (msg.seq <= member.lastSeq) return`), so this is bumped before every send, never reset.
+   *  Seeded from `Date.now()` at store creation (see below) rather than 0/1, because the server's
+   *  `member.lastSeq` survives a REJOIN (it's keyed to the room's Member, not the socket) while
+   *  this Store is rebuilt from scratch on every page load — a low starting value would silently
+   *  get every post-refresh action dropped by the server's `seq <= lastSeq` staleness check. */
   actionSeq: number;
   setupStatus: Record<Color, boolean> | null;
   stage: Stage | null;
@@ -58,6 +62,10 @@ export interface Store {
   /** Live connectivity per seat, from OPPONENT_STATUS. Starts both-true; a spectator can see
    *  either side flip, a seated player only ever sees their opponent's. */
   connection: Record<Color, boolean>;
+  /** `plyCount` of the last VIEW processed, for store-update.ts's moveLog gap detection (a
+   *  reconnect resend can jump plyCount without ever showing us the missed moves). Null until the
+   *  first VIEW of the current game. */
+  lastPlyLogged: number | null;
 }
 
 const appEl = document.getElementById('app');
@@ -81,7 +89,11 @@ const store: Store = {
   lastMove: null,
   moveLog: [],
   viewSeq: 0,
-  actionSeq: 0,
+  // Date.now() (ms since epoch, ~1.7e12) strictly exceeds any `seq` a prior session on this
+  // token could have reached — stateless, no sessionStorage schema change, and safe as long as
+  // two page loads for the same session don't land in the same millisecond (a real reload always
+  // takes far longer than that). See the field doc comment above.
+  actionSeq: Date.now(),
   setupStatus: null,
   stage: null,
   setupGen: 0,
@@ -91,6 +103,7 @@ const store: Store = {
   result: null,
   rematchVotes: null,
   connection: { RED: true, BLUE: true },
+  lastPlyLogged: null,
 };
 
 net.onStatus((s: ConnStatus) => {
