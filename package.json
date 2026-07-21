@@ -12,7 +12,10 @@
     "cli": "tsx src/cli/main.ts",
     "sim": "tsx src/sim/run.ts",
     "sim:full": "tsx src/sim/full.ts",
-    "dev:server": "tsx watch src/server/main.ts"
+    "dev:server": "tsx watch src/server/main.ts",
+    "dev:web": "vite",
+    "build:web": "vite build",
+    "serve": "npm run build:web && tsx src/server/main.ts"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
@@ -20,6 +23,7 @@
     "fast-check": "^3.19.0",
     "tsx": "^4.16.0",
     "typescript": "^5.5.0",
+    "vite": "^5.4.21",
     "vitest": "^2.0.0"
   },
   "dependencies": {

@@ -1,0 +1,142 @@
+:root {
+  color-scheme: dark;
+  --bg: #14161a;
+  --panel: #1e2126;
+  --border: #2c3038;
+  --text: #e6e8eb;
+  --muted: #9aa1ab;
+  --accent: #5b8def;
+  --warn-bg: #3a2f12;
+  --warn-fg: #f0c674;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem 1rem 4rem;
+}
+
+#status-banner {
+  width: 100%;
+  max-width: 640px;
+  margin-bottom: 1rem;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+#status-banner[hidden] {
+  display: none;
+}
+
+#app {
+  width: 100%;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+h1 {
+  text-align: center;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  margin: 0.5rem 0;
+}
+
+.lobby-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.card h2 {
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+}
+
+.card-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text);
+  font-size: 0.92rem;
+}
+
+button {
+  background: var(--accent);
+  color: #0b0d10;
+  border: none;
+  border-radius: 6px;
+  padding: 0.5rem 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+button:hover {
+  filter: brightness(1.08);
+}
+
+input,
+select {
+  background: #121417;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+}
+
+input[name='join-code'] {
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  width: 7ch;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.room-placeholder h2 {
+  font-size: 1.4rem;
+}
+
+.room-placeholder p {
+  margin: 0.15rem 0;
+}
