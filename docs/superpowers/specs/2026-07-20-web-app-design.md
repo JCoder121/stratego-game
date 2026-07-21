@@ -50,7 +50,7 @@ stratego/
 
 Discriminated unions in `src/server/protocol.ts`, shared by server and client.
 
-- **Client→server:** `CREATE_ROOM {mode, botDifficulty?, watchSpeed?}` · `JOIN_ROOM {code}` · `REJOIN {token}` · `ACTION {action, seq}` (the engine's existing `Action` type verbatim: placements, `SETUP_RANDOM`, `SETUP_DONE`, moves, resign) · `REMATCH_REQUEST` · `WATCH_CONTROL {play|pause|step|speed}`.
+- **Client→server:** `CREATE_ROOM {mode, botDifficulty?, watchSpeed?}` · `JOIN_ROOM {code}` · `REJOIN {code, token}` · `COMMIT_SETUP {placement}` (setup is staged entirely client-side — the engine has no un-place/swap action, so drag/swap/clear happen locally and the full 40-piece arrangement commits atomically on Ready; server replays it as `SETUP_PLACE`s + `SETUP_DONE` on a scratch state) · `ACTION {action, seq}` (`MOVE`/`RESIGN` only) · `REMATCH_REQUEST` · `WATCH_CONTROL {play|pause|step|speed}`.
 - **Server→client:** `ROOM_CREATED {code, token, seat}` · `JOINED {seat, token}` · `VIEW {playerView, lastMove?, seq}` · `GAME_OVER {result, fullState}` (all ranks revealed at game end) · `OPPONENT_STATUS {connected|disconnected}` · `REMATCH_STATE` · `ERROR {code, msg}`.
 - **Room codes:** 5 chars from an unambiguous alphabet (no `0/O/1/I`), e.g. `K3PXQ`. Rooms expire after 2h idle; empty rooms GC'd after 5 min.
 - **Reconnect:** server issues a random seat token on join; client keeps it in `sessionStorage` and auto-`REJOIN`s on refresh/drop. Old socket for a token is closed if a new one adopts it. No forfeit timer in v1.
