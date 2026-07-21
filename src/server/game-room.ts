@@ -2,14 +2,15 @@ import { randomBytes } from 'node:crypto';
 import {
   createGame, rosterPieceIds, strategoReduce, validateAction, viewFor,
 } from '../engine/index.js';
-import type { Action, Color, GameState, PieceId, Square } from '../engine/index.js';
+import type { Action, Color, GameEvent, GameState, PieceId, Square } from '../engine/index.js';
 import { randomBot } from '../bots/random.js';
 import { heuristicBot } from '../bots/heuristic.js';
 import type { Bot } from '../bots/types.js';
 import { makeRandom, makeSeeded } from '../rng/rng.js';
 import type { Rng } from '../rng/rng.js';
 import type {
-  BotKind, CapturedRanks, ClientMsg, LastMove, Mode, Role, ServerMsg, WatchSpeed, WatchView,
+  BotKind, CapturedRanks, ClientMsg, LastMove, Mode, PlayAction, Role, ServerMsg, StrikeSummary,
+  WatchSpeed, WatchView,
 } from './protocol.js';
 
 export interface Scheduler {
@@ -24,20 +25,27 @@ export interface RoomOpts {
   seed?: number;
   scheduler: Scheduler;
   onEmptyChange?: (empty: boolean) => void;
+  /** Bot construction hook, overridable for tests (e.g. to inject a throwing bot). */
+  botFactory?: (kind: BotKind) => Bot;
 }
 
 interface Member {
   role: Role;
   connected: boolean;
   send: (m: ServerMsg) => void;
+  lastSeq: number;
 }
+
+/** vs-bot pacing (HUMAN_VS_BOT and construction-time bot moves outside watch mode). */
+export const BOT_DELAY_MS = 500;
 
 function randomToken(): string {
   return randomBytes(8).toString('hex');
 }
 
-function botFor(kind: BotKind): Bot {
-  return kind === 'random' ? randomBot : heuristicBot;
+const DEFAULT_BOTS: Record<BotKind, Bot> = { random: randomBot, heuristic: heuristicBot };
+function defaultBotFactory(kind: BotKind): Bot {
+  return DEFAULT_BOTS[kind];
 }
 
 /** Ranks are public once captured (every capture goes through a rank-revealing strike). */
@@ -61,12 +69,22 @@ export class GameRoom {
   private state: GameState;
   private readonly members = new Map<string, Member>();
   private readonly botSeats: Partial<Record<Color, Bot>> = {};
+  private readonly botKinds: Partial<Record<Color, BotKind>> = {};
+  private readonly botFactory: (kind: BotKind) => Bot;
   private readonly rng: Rng;
   private seq = 0;
+  private timer: unknown = null;
+  /** Only meaningful for BOT_VS_BOT; always true otherwise (pump() only consults it in BOT_VS_BOT). */
+  private playing: boolean;
+  private watchSpeed: WatchSpeed;
+  private readonly rematchVotes = new Set<Color>();
 
   constructor(private readonly opts: RoomOpts) {
+    this.botFactory = opts.botFactory ?? defaultBotFactory;
     this.rng = opts.seed !== undefined ? makeSeeded(opts.seed) : makeRandom();
     this.state = createGame({ seed: opts.seed });
+    this.playing = opts.mode !== 'BOT_VS_BOT';
+    this.watchSpeed = opts.watchSpeed ?? 1000;
 
     if (opts.mode === 'HUMAN_VS_BOT') {
       this.setupBotSeat('BLUE', opts.bots?.BLUE ?? 'heuristic');
@@ -74,14 +92,18 @@ export class GameRoom {
       this.setupBotSeat('RED', opts.bots?.RED ?? 'heuristic');
       this.setupBotSeat('BLUE', opts.bots?.BLUE ?? 'heuristic');
     }
+    this.pump();
   }
 
-  /** Bot seats set up (random shuffle) + SETUP_DONE immediately at construction. */
+  /** Bot seats set up (random shuffle) + SETUP_DONE immediately at construction, and again on rematch. */
   private setupBotSeat(color: Color, kind: BotKind): void {
+    if (!this.botSeats[color]) {
+      this.botKinds[color] = kind;
+      this.botSeats[color] = this.botFactory(kind);
+    }
     const order = this.rng.shuffle(rosterPieceIds(color));
     this.state = strategoReduce(this.state, { type: 'SETUP_RANDOM', color, order }).state;
     this.state = strategoReduce(this.state, { type: 'SETUP_DONE', color }).state;
-    this.botSeats[color] = botFor(kind);
   }
 
   private seatTaken(color: Color): boolean {
@@ -107,7 +129,7 @@ export class GameRoom {
     const role = this.assignSeat();
     if (role === null) return null;
     const token = randomToken();
-    this.members.set(token, { role, connected: true, send });
+    this.members.set(token, { role, connected: true, send, lastSeq: 0 });
     if (this.state.phase === 'SETUP') {
       this.broadcastSetupStatus();
     } else {
@@ -149,9 +171,13 @@ export class GameRoom {
         this.commitSetup(member.role, msg.placement);
         return;
       case 'ACTION':
+        this.handleAction(member, msg);
+        return;
       case 'REMATCH_REQUEST':
+        this.handleRematch(member);
+        return;
       case 'WATCH_CONTROL':
-        // Play actions, rematch voting, and watch controls: implemented in Task 4.
+        this.handleWatchControl(msg);
         return;
       default:
         return;
@@ -180,6 +206,17 @@ export class GameRoom {
   private broadcastViews(lastMove: LastMove | undefined): void {
     this.seq++;
     for (const m of this.members.values()) if (m.connected) m.send(this.viewMsg(m.role, lastMove));
+  }
+
+  private broadcastGameOver(): void {
+    if (!this.state.result) return;
+    const msg: ServerMsg = {
+      t: 'GAME_OVER',
+      result: this.state.result,
+      finalView: watchView(this.state),
+      captured: capturedRanks(this.state),
+    };
+    for (const m of this.members.values()) if (m.connected) m.send(msg);
   }
 
   private sendTo(role: Role, msg: ServerMsg): void {
@@ -211,7 +248,169 @@ export class GameRoom {
 
     this.state = result.state; // adopt atomically
     this.broadcastSetupStatus();
+    if (this.state.phase === 'PLAY') {
+      this.broadcastViews(undefined);
+      this.pump();
+    }
+  }
+
+  // ---- Play actions (MOVE/RESIGN) ----
+
+  private handleAction(member: Member, msg: Extract<ClientMsg, { t: 'ACTION' }>): void {
+    if (!member.connected) return; // never invoke a stale send callback
+    if (member.role !== 'RED' && member.role !== 'BLUE') {
+      member.send({ t: 'ERROR', code: 'INVALID_ACTION', msg: 'spectators cannot act' });
+      return;
+    }
+    if (msg.seq <= member.lastSeq) return; // stale, silently dropped
+    member.lastSeq = msg.seq;
+
+    const action = msg.action;
+    if (action.color !== member.role) {
+      member.send({ t: 'ERROR', code: 'INVALID_ACTION', msg: 'action color does not match your seat' });
+      return;
+    }
+    if (this.state.phase === 'PLAY' && action.color !== this.state.turn) {
+      member.send({ t: 'ERROR', code: 'NOT_YOUR_TURN', msg: `it is ${this.state.turn}'s turn` });
+      return;
+    }
+    const err = this.applyChecked(action);
+    if (err) {
+      member.send({ t: 'ERROR', code: 'INVALID_ACTION', msg: err });
+      return;
+    }
+    this.pump();
+  }
+
+  /** Validates + reduces a play action, adopts state, broadcasts VIEW (w/ lastMove) and, if the
+   * game just ended, GAME_OVER — exactly once, since a GAME_OVER'd state rejects all further actions. */
+  private applyChecked(action: PlayAction): string | null {
+    const err = validateAction(this.state, action);
+    if (err) return err;
+    const result = strategoReduce(this.state, action);
+    const rejected = result.events.find((e): e is Extract<GameEvent, { type: 'REJECTED' }> => e.type === 'REJECTED');
+    if (rejected) return rejected.reason;
+
+    this.state = result.state;
+    this.broadcastViews(this.buildLastMove(action, result.events));
+    if (result.events.some((e) => e.type === 'GAME_OVER')) this.broadcastGameOver();
+    return null;
+  }
+
+  private buildLastMove(action: PlayAction, events: GameEvent[]): LastMove | undefined {
+    if (action.type !== 'MOVE') return undefined;
+    const strikeEvent = events.find((e): e is Extract<GameEvent, { type: 'STRIKE' }> => e.type === 'STRIKE');
+    const strike: StrikeSummary | undefined = strikeEvent
+      ? { attackerRank: strikeEvent.attackerRank, defenderRank: strikeEvent.defenderRank, outcome: strikeEvent.outcome }
+      : undefined;
+    return { from: action.from, to: action.to, by: action.color, strike };
+  }
+
+  // ---- Bot pacing ----
+
+  private delayMs(): number {
+    if (this.opts.mode === 'BOT_VS_BOT') return this.watchSpeed === 'step' ? 0 : this.watchSpeed;
+    return BOT_DELAY_MS;
+  }
+
+  private clearTimer(): void {
+    if (this.timer !== null) {
+      this.opts.scheduler.clear(this.timer);
+      this.timer = null;
+    }
+  }
+
+  private runBotPly(bot: Bot): void {
+    try {
+      const action = bot(viewFor(this.state, this.state.turn), this.rng);
+      if (action.type !== 'MOVE' && action.type !== 'RESIGN') throw new Error('bot returned a non-play action');
+      const err = this.applyChecked(action);
+      if (err) throw new Error(err);
+    } catch {
+      this.applyChecked({ type: 'RESIGN', color: this.state.turn });
+    }
+  }
+
+  private pump(): void {
+    if (this.state.phase !== 'PLAY') return;
+    const bot = this.botSeats[this.state.turn];
+    if (!bot || (this.opts.mode === 'BOT_VS_BOT' && !this.playing)) return;
+    this.timer = this.opts.scheduler.set(() => {
+      this.timer = null;
+      this.runBotPly(bot);
+      this.pump();
+    }, this.delayMs());
+  }
+
+  // ---- Watch controls (BOT_VS_BOT spectating) ----
+
+  private handleWatchControl(msg: Extract<ClientMsg, { t: 'WATCH_CONTROL' }>): void {
+    if (this.opts.mode !== 'BOT_VS_BOT') return;
+    switch (msg.control) {
+      case 'play':
+        this.playing = true;
+        this.pump();
+        return;
+      case 'pause':
+        this.playing = false;
+        this.clearTimer();
+        return;
+      case 'step': {
+        this.clearTimer();
+        const bot = this.botSeats[this.state.turn];
+        if (this.state.phase === 'PLAY' && bot) this.runBotPly(bot);
+        return;
+      }
+      case 'speed':
+        if (msg.speed !== undefined) this.watchSpeed = msg.speed;
+        if (this.playing) {
+          this.clearTimer();
+          this.pump();
+        }
+        return;
+    }
+  }
+
+  // ---- Rematch ----
+
+  private requiredRematchVoters(): Color[] {
+    switch (this.opts.mode) {
+      case 'HUMAN_VS_HUMAN': return ['RED', 'BLUE'];
+      case 'HUMAN_VS_BOT': return ['RED'];
+      case 'BOT_VS_BOT': return [];
+    }
+  }
+
+  private handleRematch(member: Member): void {
+    if (this.opts.mode === 'BOT_VS_BOT') {
+      if (member.role === 'SPECTATOR') this.doRematch();
+      return;
+    }
+    if (member.role !== 'RED' && member.role !== 'BLUE') return;
+    this.rematchVotes.add(member.role);
+    if (this.requiredRematchVoters().every((r) => this.rematchVotes.has(r))) {
+      this.doRematch();
+    } else {
+      this.broadcastRematchState();
+    }
+  }
+
+  private broadcastRematchState(): void {
+    const msg: ServerMsg = { t: 'REMATCH_STATE', votes: [...this.rematchVotes] };
+    for (const m of this.members.values()) if (m.connected) m.send(msg);
+  }
+
+  private doRematch(): void {
+    this.clearTimer();
+    this.rematchVotes.clear();
+    this.state = createGame({ seed: this.opts.seed });
+    for (const color of ['RED', 'BLUE'] as const) {
+      if (this.botSeats[color]) this.setupBotSeat(color, this.botKinds[color]!);
+    }
+    if (this.opts.mode === 'BOT_VS_BOT') this.playing = false;
+    this.broadcastSetupStatus();
     if (this.state.phase === 'PLAY') this.broadcastViews(undefined);
+    this.pump();
   }
 
   private viewMsg(role: Role, lastMove?: LastMove): ServerMsg {

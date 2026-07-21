@@ -1,42 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { GameRoom, capturedRanks, watchView, type Scheduler } from '../../src/server/game-room.js';
-import { createGame, presetNames, presetPlacement, rosterPieceIds, strategoReduce, type Color, type GameState, type PieceId, type Square } from '../../src/engine/index.js';
-import type { ServerMsg } from '../../src/server/protocol.js';
-
-function member() {
-  const inbox: ServerMsg[] = [];
-  return { inbox, send: (m: ServerMsg) => inbox.push(m) };
-}
-
-function manualScheduler(): Scheduler & { fire(): void } {
-  const pending: (() => void)[] = [];
-  return {
-    set(fn: () => void, _ms: number) {
-      pending.push(fn);
-      return fn;
-    },
-    clear(id: unknown) {
-      const i = pending.indexOf(id as () => void);
-      if (i >= 0) pending.splice(i, 1);
-    },
-    fire() {
-      const toRun = pending.splice(0);
-      for (const fn of toRun) fn();
-    },
-  };
-}
-
-function fullPlacement(color: Color, presetName = presetNames()[0]!): [PieceId, Square][] {
-  const map = presetPlacement(color, presetName);
-  if (!map) throw new Error('bad preset');
-  return Object.entries(map) as [PieceId, Square][];
-}
-
-function lastMsg(inbox: ServerMsg[]): ServerMsg {
-  const m = inbox[inbox.length - 1];
-  if (!m) throw new Error('inbox empty');
-  return m;
-}
+import { GameRoom, capturedRanks, watchView } from '../../src/server/game-room.js';
+import { createGame, rosterPieceIds, strategoReduce, type GameState, type PieceId, type Square } from '../../src/engine/index.js';
+import { fullPlacement, lastMsg, manualScheduler, member } from './helpers.js';
 
 describe('GameRoom membership', () => {
   it('human/human: 1st join RED, 2nd BLUE, 3rd null; each join broadcasts SETUP_STATUS', () => {
