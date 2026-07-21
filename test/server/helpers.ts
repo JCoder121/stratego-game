@@ -1,5 +1,5 @@
 import {
-  presetPlacement, rosterPieceIds, setupSquares, type Color, type PieceId, type Square,
+  presetNames, presetPlacement, rosterPieceIds, setupSquares, type Color, type PieceId, type Square,
 } from '../../src/engine/index.js';
 import type { Scheduler } from '../../src/server/game-room.js';
 import type { ServerMsg } from '../../src/server/protocol.js';
@@ -38,7 +38,7 @@ export function manualScheduler(): Scheduler & { fire(): void; pendingCount(): n
   };
 }
 
-export function fullPlacement(color: Color, presetName: string = 'balanced'): [PieceId, Square][] {
+export function fullPlacement(color: Color, presetName: string = presetNames()[0]!): [PieceId, Square][] {
   const map = presetPlacement(color, presetName);
   if (!map) throw new Error('bad preset');
   return Object.entries(map) as [PieceId, Square][];

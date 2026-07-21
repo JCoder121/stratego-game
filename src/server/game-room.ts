@@ -48,6 +48,8 @@ function defaultBotFactory(kind: BotKind): Bot {
   return DEFAULT_BOTS[kind];
 }
 
+const other = (c: Color): Color => (c === 'RED' ? 'BLUE' : 'RED');
+
 /** Ranks are public once captured (every capture goes through a rank-revealing strike). */
 export function capturedRanks(state: GameState): CapturedRanks {
   const out: CapturedRanks = { RED: [], BLUE: [] };
@@ -270,6 +272,19 @@ export class GameRoom {
       member.send({ t: 'ERROR', code: 'INVALID_ACTION', msg: 'action color does not match your seat' });
       return;
     }
+
+    // RESIGN is allowed from either seated player at any time during PLAY, unlike MOVE — the
+    // engine itself turn-gates RESIGN (validateAction), so an off-turn resign is handled here.
+    if (action.type === 'RESIGN') {
+      if (this.state.phase !== 'PLAY') {
+        member.send({ t: 'ERROR', code: 'INVALID_ACTION', msg: 'game is not in play' });
+        return;
+      }
+      this.resign(action.color);
+      this.pump();
+      return;
+    }
+
     if (this.state.phase === 'PLAY' && action.color !== this.state.turn) {
       member.send({ t: 'ERROR', code: 'NOT_YOUR_TURN', msg: `it is ${this.state.turn}'s turn` });
       return;
@@ -280,6 +295,20 @@ export class GameRoom {
       return;
     }
     this.pump();
+  }
+
+  /** On-turn resign goes through the normal engine reducer path (validateAction/strategoReduce
+   * enforce turn there, matching bot-crash resigns). Off-turn resign is handled server-side —
+   * the engine can't express it — but broadcasts GAME_OVER exactly the same way applyChecked
+   * does for a reducer-driven game end. */
+  private resign(color: Color): void {
+    if (color === this.state.turn) {
+      this.applyChecked({ type: 'RESIGN', color });
+      return;
+    }
+    this.clearTimer();
+    this.state = { ...this.state, phase: 'GAME_OVER', result: { winner: other(color), reason: 'RESIGN' } };
+    this.broadcastGameOver();
   }
 
   /** Validates + reduces a play action, adopts state, broadcasts VIEW (w/ lastMove) and, if the
@@ -356,6 +385,7 @@ export class GameRoom {
         this.clearTimer();
         return;
       case 'step': {
+        this.playing = false; // otherwise a later 'speed' would silently resume autoplay
         this.clearTimer();
         const bot = this.botSeats[this.state.turn];
         if (this.state.phase === 'PLAY' && bot) this.runBotPly(bot);
@@ -382,6 +412,11 @@ export class GameRoom {
   }
 
   private handleRematch(member: Member): void {
+    if (!member.connected) return;
+    if (this.state.phase !== 'GAME_OVER') {
+      member.send({ t: 'ERROR', code: 'INVALID_ACTION', msg: 'rematch can only be requested once the game is over' });
+      return;
+    }
     if (this.opts.mode === 'BOT_VS_BOT') {
       if (member.role === 'SPECTATOR') this.doRematch();
       return;

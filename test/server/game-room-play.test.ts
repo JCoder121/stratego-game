@@ -11,6 +11,9 @@ function enemyIdPattern(recipientColor: 'RED' | 'BLUE'): RegExp {
   const enemy = recipientColor === 'RED' ? 'BLUE' : 'RED';
   return new RegExp(`${enemy}-${RANK_ID}-`);
 }
+// GAME_OVER's finalView is always a WatchView (all-revealed, no ids at all, by construction) —
+// so unlike a player VIEW, no real id of *either* color should ever appear in a GAME_OVER message.
+const ANY_REAL_ID_PATTERN = new RegExp(`(RED|BLUE)-${RANK_ID}-`);
 
 function setupBoth(room: GameRoom, redToken: string, blueToken: string, presetName: string): void {
   room.handle(redToken, { t: 'COMMIT_SETUP', placement: fullPlacement('RED', presetName) });
@@ -210,7 +213,24 @@ describe('GameRoom play: watch mode', () => {
     const over = gameOvers[0]!;
     if (over.t !== 'GAME_OVER') throw new Error('expected GAME_OVER');
     expect(over.finalView.pieces.every((p) => p.rank !== null)).toBe(true);
+    expect(JSON.stringify(over)).not.toMatch(ANY_REAL_ID_PATTERN);
     expect(scheduler.pendingCount()).toBe(0);
+  });
+
+  it('play then step then speed does not silently resume autoplay', () => {
+    const scheduler = manualScheduler();
+    const room = new GameRoom({ mode: 'BOT_VS_BOT', scheduler, seed: 13, watchSpeed: 500 });
+    const spec = member();
+    const specJoin = room.joinHuman(spec.send)!;
+
+    room.handle(specJoin.token, { t: 'WATCH_CONTROL', control: 'play' });
+    expect(scheduler.pendingCount()).toBe(1);
+
+    room.handle(specJoin.token, { t: 'WATCH_CONTROL', control: 'step' });
+    expect(scheduler.pendingCount()).toBe(0); // step cancels the pending autoplay timer too
+
+    room.handle(specJoin.token, { t: 'WATCH_CONTROL', control: 'speed', speed: 1000 });
+    expect(scheduler.pendingCount()).toBe(0); // must NOT silently resume autoplay
   });
 });
 
@@ -246,7 +266,10 @@ describe('GameRoom play: resign + rematch', () => {
     expect(lastMsg(red.inbox)).toMatchObject({ t: 'SETUP_STATUS', ready: { RED: false, BLUE: false } });
     expect(lastMsg(blue.inbox)).toMatchObject({ t: 'SETUP_STATUS', ready: { RED: false, BLUE: false } });
 
-    // Votes cleared: a single new vote after the rematch reports just that one voter again.
+    // Votes cleared (not just "state reset"): play a second game to GAME_OVER and confirm a
+    // single new vote reports just that one voter again, not a stale/accumulated set.
+    setupBoth(room, redJoin.token, blueJoin.token, 'balanced');
+    room.handle(redJoin.token, { t: 'ACTION', action: { type: 'RESIGN', color: 'RED' }, seq: 2 });
     room.handle(redJoin.token, { t: 'REMATCH_REQUEST' });
     expect(lastMsg(red.inbox)).toMatchObject({ t: 'REMATCH_STATE', votes: ['RED'] });
   });
@@ -277,6 +300,80 @@ describe('GameRoom play: resign + rematch', () => {
   });
 });
 
+describe('GameRoom play: off-turn resign', () => {
+  it('BLUE resigning while it is RED\'s turn still ends the game (winner RED), exactly one GAME_OVER each', () => {
+    const room = new GameRoom({ mode: 'HUMAN_VS_HUMAN', scheduler: manualScheduler() });
+    const red = member();
+    const blue = member();
+    const redJoin = room.joinHuman(red.send)!;
+    const blueJoin = room.joinHuman(blue.send)!;
+    setupBoth(room, redJoin.token, blueJoin.token, 'balanced'); // phase PLAY, turn RED
+
+    room.handle(blueJoin.token, { t: 'ACTION', action: { type: 'RESIGN', color: 'BLUE' }, seq: 1 });
+
+    for (const inbox of [red.inbox, blue.inbox]) {
+      const overs = inbox.filter((m) => m.t === 'GAME_OVER');
+      expect(overs).toHaveLength(1);
+      expect(overs[0]).toMatchObject({ result: { winner: 'RED', reason: 'RESIGN' } });
+    }
+  });
+
+  it('RED resigning while it is BLUE\'s turn ends the game (winner BLUE) and cancels a pending bot timer', () => {
+    const scheduler = manualScheduler();
+    const room = new GameRoom({ mode: 'HUMAN_VS_BOT', scheduler, seed: 9 });
+    const red = member();
+    const redJoin = room.joinHuman(red.send)!;
+    room.handle(redJoin.token, { t: 'COMMIT_SETUP', placement: fullPlacement('RED') });
+    room.handle(redJoin.token, {
+      t: 'ACTION',
+      action: { type: 'MOVE', color: 'RED', from: { r: 6, c: 0 }, to: { r: 5, c: 0 } },
+      seq: 1,
+    });
+    expect(scheduler.pendingCount()).toBe(1); // BLUE (bot)'s turn scheduled
+
+    // It is now BLUE's turn; RED resigns off-turn.
+    room.handle(redJoin.token, { t: 'ACTION', action: { type: 'RESIGN', color: 'RED' }, seq: 2 });
+
+    expect(scheduler.pendingCount()).toBe(0); // the pending bot ply was cancelled
+    const overs = red.inbox.filter((m) => m.t === 'GAME_OVER');
+    expect(overs).toHaveLength(1);
+    expect(overs[0]).toMatchObject({ result: { winner: 'BLUE', reason: 'RESIGN' } });
+  });
+});
+
+describe('GameRoom play: REMATCH_REQUEST gating', () => {
+  it('mid-PLAY rematch request is rejected with INVALID_ACTION; votes stay untouched', () => {
+    const room = new GameRoom({ mode: 'HUMAN_VS_HUMAN', scheduler: manualScheduler() });
+    const red = member();
+    const blue = member();
+    const redJoin = room.joinHuman(red.send)!;
+    const blueJoin = room.joinHuman(blue.send)!;
+    setupBoth(room, redJoin.token, blueJoin.token, 'balanced'); // phase PLAY
+
+    room.handle(redJoin.token, { t: 'REMATCH_REQUEST' });
+    expect(lastMsg(red.inbox)).toMatchObject({ t: 'ERROR', code: 'INVALID_ACTION' });
+
+    // Not just an empty-message no-op: votes really are untouched, proven by a real post-game-over
+    // vote reporting just that one voter (not e.g. a leftover from the rejected mid-PLAY attempt).
+    room.handle(redJoin.token, { t: 'ACTION', action: { type: 'RESIGN', color: 'RED' }, seq: 1 });
+    room.handle(redJoin.token, { t: 'REMATCH_REQUEST' });
+    expect(lastMsg(red.inbox)).toMatchObject({ t: 'REMATCH_STATE', votes: ['RED'] });
+  });
+
+  it('BOT_VS_BOT: mid-PLAY spectator rematch request is rejected; game state is unaffected', () => {
+    const scheduler = manualScheduler();
+    const room = new GameRoom({ mode: 'BOT_VS_BOT', scheduler, seed: 11 });
+    const spec = member();
+    const specJoin = room.joinHuman(spec.send)!;
+
+    room.handle(specJoin.token, { t: 'REMATCH_REQUEST' });
+    expect(lastMsg(spec.inbox)).toMatchObject({ t: 'ERROR', code: 'INVALID_ACTION' });
+
+    // Unaffected: still paused, no scheduler activity from the rejected request.
+    expect(scheduler.pendingCount()).toBe(0);
+  });
+});
+
 describe('GameRoom play: bot crash -> resign', () => {
   it('a throwing bot resigns its seat instead of throwing out of the room', () => {
     const throwingBot: Bot = () => {
@@ -301,6 +398,8 @@ describe('GameRoom play: bot crash -> resign', () => {
 
     expect(() => scheduler.fire()).not.toThrow();
 
-    expect(lastMsg(red.inbox)).toMatchObject({ t: 'GAME_OVER', result: { winner: 'RED', reason: 'RESIGN' } });
+    const msg = lastMsg(red.inbox);
+    expect(msg).toMatchObject({ t: 'GAME_OVER', result: { winner: 'RED', reason: 'RESIGN' } });
+    expect(JSON.stringify(msg)).not.toMatch(ANY_REAL_ID_PATTERN);
   });
 });
