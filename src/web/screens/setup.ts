@@ -59,6 +59,18 @@ export function render(root: HTMLElement, store: Store): void {
   heading.textContent = 'Set up your pieces';
   root.appendChild(heading);
 
+  // The room-code placeholder (main.ts's renderRoomPlaceholder) is only ever shown for the
+  // brief window before a Stage exists — by the time either seated player reaches this screen
+  // it's already been skipped, so this is the only place a friend-game host ever sees the code
+  // to share. Also doubles as a stable e2e hook (see e2e/smoke.spec.ts).
+  if (store.code) {
+    const codeLine = document.createElement('p');
+    codeLine.className = 'hint room-code';
+    codeLine.dataset.testid = 'room-code';
+    codeLine.textContent = `Room code: ${store.code}`;
+    root.appendChild(codeLine);
+  }
+
   const layout = document.createElement('div');
   layout.className = 'setup-layout';
   root.appendChild(layout);

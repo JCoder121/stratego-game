@@ -15,9 +15,11 @@
     "dev:server": "tsx watch src/server/main.ts",
     "dev:web": "vite",
     "build:web": "vite build",
-    "serve": "npm run build:web && tsx src/server/main.ts"
+    "serve": "npm run build:web && tsx src/server/main.ts",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/node": "^20.14.0",
     "@types/ws": "^8.18.1",
     "fast-check": "^3.19.0",

@@ -57,6 +57,67 @@ immediately). Commands:
 Input is read as an async line iterator, so you can also pipe a whole command script in, e.g.
 `cat script.txt | npm run cli`.
 
+## Web app
+
+A browser UI (`src/web`, a small vanilla-TS/Vite client) sits alongside the CLI as a second shell
+over the same engine, talking to a WebSocket server (`src/server`) that owns each room's
+`GameState` and drives bot turns server-side.
+
+### Dev workflow
+
+Two dev servers, run in separate terminals:
+
+```bash
+npm run dev:server   # tsx watch src/server/main.ts — ws server on :3000, restarts on change
+npm run dev:web       # vite — client dev server with hot reload, proxies /ws to :3000
+```
+
+Open the URL Vite prints (typically `http://localhost:5173`).
+
+### LAN play
+
+For a single build served straight off the ws server — useful for playing a friend over the same
+network without two dev servers running:
+
+```bash
+npm run serve   # build:web, then tsx src/server/main.ts on :3000
+```
+
+Find your Mac's LAN IP and share `http://<mac-ip>:3000` with the other player:
+
+```bash
+ipconfig getifaddr en0
+```
+
+### Modes
+
+- **Play a friend**: "Create room" gets you a 5-character room code (shown on your setup screen)
+  to share; the other player enters it under "Join a room". Both place their pieces (a preset or
+  Random, then Ready) and play once both are ready.
+- **Play the bot**: Easy (`random` bot) or Hard (`heuristic` bot) — you're always RED, the bot
+  sets up and moves for BLUE server-side.
+- **Watch bots**: pick a difficulty for each side and a playback speed (or step through ply by
+  ply) to spectate a bot-vs-bot game with no seat of your own.
+
+### Reconnect
+
+The client keeps its room/role/token in `sessionStorage` and reconnects with backoff (1s, 2s, 3s,
+4s, capped at 5s) on any drop; the server resends the current `SETUP_STATUS`/`VIEW` on rejoin, so
+a refresh or a flaky connection mid-game picks back up where it left off rather than losing the
+seat. Each seated player sees an "opponent disconnected" banner while the other side is down.
+
+### Tests
+
+```bash
+npm test              # unit + property + web logic tests (vitest)
+npm run test:ws       # WS-gated server integration test (real sockets, not mocked)
+npm run test:e2e      # Playwright smoke test — boots `npm run serve` and drives real browsers
+SIM=1 npm run test:sim  # longer, env-gated self-play termination tests
+```
+
+`test:e2e` needs Chromium installed once (`npx playwright install chromium`); it's not run as
+part of `npm test`.
+
 ## Architecture
 
 ```
