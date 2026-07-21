@@ -29,6 +29,7 @@ function makeStore(): Store {
     status: 'open',
     role: null,
     code: null,
+    mode: null,
     phase: null,
     lastView: null,
     captured: null,

@@ -2,18 +2,22 @@ import type { Store } from '../main.js';
 import type { BotKind, WatchSpeed } from '../../server/protocol.js';
 
 function createFriend(store: Store): void {
+  store.mode = 'HUMAN_VS_HUMAN';
   store.net.send({ t: 'CREATE_ROOM', mode: 'HUMAN_VS_HUMAN' });
 }
 
 function createBotGame(store: Store, difficulty: BotKind): void {
+  store.mode = 'HUMAN_VS_BOT';
   store.net.send({ t: 'CREATE_ROOM', mode: 'HUMAN_VS_BOT', botDifficulty: difficulty });
 }
 
 function createWatch(store: Store, red: BotKind, blue: BotKind, speed: WatchSpeed): void {
+  store.mode = 'BOT_VS_BOT';
   store.net.send({ t: 'CREATE_ROOM', mode: 'BOT_VS_BOT', bots: { RED: red, BLUE: blue }, watchSpeed: speed });
 }
 
 function joinRoom(store: Store, code: string): void {
+  store.mode = 'HUMAN_VS_HUMAN';
   store.net.send({ t: 'JOIN_ROOM', code });
 }
 

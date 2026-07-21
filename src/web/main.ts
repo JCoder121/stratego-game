@@ -35,6 +35,7 @@ export interface Store {
   status: ConnStatus;
   role: Role | null;
   code: string | null;
+  mode: 'HUMAN_VS_HUMAN' | 'HUMAN_VS_BOT' | 'BOT_VS_BOT' | null;
   phase: Phase | null;
   lastView: PlayerView | WatchView | null;
   captured: CapturedRanks | null;
@@ -84,6 +85,7 @@ const store: Store = {
   status: 'connecting',
   role: null,
   code: null,
+  mode: null,
   phase: null,
   lastView: null,
   captured: null,

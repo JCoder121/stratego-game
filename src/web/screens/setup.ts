@@ -63,7 +63,7 @@ export function render(root: HTMLElement, store: Store): void {
   // brief window before a Stage exists — by the time either seated player reaches this screen
   // it's already been skipped, so this is the only place a friend-game host ever sees the code
   // to share. Also doubles as a stable e2e hook (see e2e/smoke.spec.ts).
-  if (store.code) {
+  if (store.code && store.mode === 'HUMAN_VS_HUMAN') {
     const codeLine = document.createElement('p');
     codeLine.className = 'hint room-code';
     codeLine.dataset.testid = 'room-code';
