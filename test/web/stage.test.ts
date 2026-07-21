@@ -121,6 +121,15 @@ describe('place', () => {
     expect(stage.placed.size).toBe(0);
   });
 
+  it('rejects out-of-board rows and columns rather than throwing', () => {
+    const id = redIds()[0]!;
+    for (const sq of [{ r: -1, c: 0 }, { r: 10, c: 0 }, { r: 6, c: -1 }, { r: 6, c: 10 }]) {
+      const stage = place(newStage('RED'), id, sq);
+      expect(stage.placed.size).toBe(0);
+      expect(pieceAtSquare(stage, sq)).toBeNull();
+    }
+  });
+
   it('is a no-op placing an already-placed piece back onto its own square', () => {
     const id = redIds()[0]!;
     let stage = place(newStage('RED'), id, RED_SQ_A);

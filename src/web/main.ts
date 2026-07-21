@@ -1,10 +1,10 @@
 import type { Color, Phase, PlayerView } from '../engine/index.js';
 import type { CapturedRanks, LastMove, Role, ServerMsg, WatchView } from '../server/protocol.js';
-import { connect, loadSession, saveSession } from './net/ws-client.js';
+import { connect, loadSession } from './net/ws-client.js';
 import type { ConnStatus, Net } from './net/ws-client.js';
 import { render as renderLobby } from './screens/lobby.js';
 import { render as renderSetup } from './screens/setup.js';
-import { newStage } from './board/stage.js';
+import { applyServerMsg, ensureStage } from './store-update.js';
 import type { Stage } from './board/stage.js';
 
 /**
@@ -18,9 +18,14 @@ import type { Stage } from './board/stage.js';
  * union of both signals: SETUP_STATUS means SETUP, VIEW carries the authoritative PLAY/GAME_OVER.
  *
  * `stage`/`setupGen`/`setupLocked`/`setupError` are the setup screen's client-staged state (Task
- * 9). `stage` is rebuilt fresh (and `setupGen` bumped) every time `phase` transitions *into*
- * SETUP — covers first entry and every rematch — but left alone on subsequent SETUP_STATUS pings
- * within the same session (e.g. the opponent readying up) so in-progress staging isn't lost.
+ * 9). `stage` is rebuilt (and `setupGen` bumped) by store-update.ts's `ensureStage`, a
+ * level-triggered invariant re-checked after every message (and again below, before every
+ * render): whenever `phase === 'SETUP'` and role is known and `stage === null`, build a fresh
+ * one. It's level- rather than edge-triggered because on a *fresh* room, the server's
+ * SETUP_STATUS broadcast races ahead of ROOM_CREATED/JOINED (see store-update.ts's doc comment)
+ * — an edge check ("phase just became SETUP") can fire while role is still null and never get
+ * another chance. `stage` is nulled whenever `phase` leaves SETUP, which is what makes a rematch's
+ * fresh stage correct without needing to catch that transition edge either.
  */
 export interface Store {
   net: Net;
@@ -79,44 +84,9 @@ net.onStatus((s: ConnStatus) => {
 });
 
 net.onMsg((msg: ServerMsg) => {
-  switch (msg.t) {
-    case 'ROOM_CREATED':
-    case 'JOINED':
-      store.role = msg.role;
-      store.code = msg.code;
-      saveSession(msg.code, msg.token, msg.role);
-      location.hash = '#/room';
-      break;
-    case 'VIEW':
-      store.phase = msg.view.phase;
-      store.lastView = msg.view;
-      store.captured = msg.captured;
-      store.lastMove = msg.lastMove ?? null;
-      break;
-    case 'SETUP_STATUS': {
-      const enteringSetup = store.phase !== 'SETUP';
-      store.phase = 'SETUP';
-      store.setupStatus = msg.ready;
-      if (enteringSetup && (store.role === 'RED' || store.role === 'BLUE')) {
-        store.stage = newStage(store.role);
-        store.setupGen += 1;
-        store.setupLocked = false;
-        store.setupError = null;
-      }
-      break;
-    }
-    case 'ERROR':
-      if (msg.code === 'BAD_SETUP') {
-        store.setupLocked = false;
-        store.setupError = msg.msg;
-      }
-      // BAD_TOKEN/NO_ROOM already handled by ws-client (session clear + route to lobby); other
-      // codes (BAD_MSG/ROOM_FULL/NOT_YOUR_TURN/INVALID_ACTION) have no store field yet (Task 10).
-      break;
-    default:
-      // GAME_OVER / OPPONENT_STATUS / REMATCH_STATE: no store field yet (Task 10).
-      break;
-  }
+  applyServerMsg(store, msg);
+  // Routing is a DOM concern kept out of the (unit-testable) applyServerMsg — see store-update.ts.
+  if (msg.t === 'ROOM_CREATED' || msg.t === 'JOINED') location.hash = '#/room';
   renderCurrentScreen();
 });
 
@@ -151,6 +121,10 @@ function renderRoomPlaceholder(root: HTMLElement, s: Store): void {
 }
 
 function renderCurrentScreen(): void {
+  // Belt-and-suspenders: applyServerMsg already re-checks this after every message, but calling
+  // it here too means a render triggered any other way (onStatus, hashchange, initial load) can
+  // never observe a stale "should have a stage but doesn't" state either.
+  ensureStage(store);
   const hash = location.hash || '#/';
   if (import.meta.env.DEV && hash.startsWith('#/dev-board')) {
     // Dev-only scratch route (Task 8 manual sanity check) — dynamic import keeps devBoard.ts and
