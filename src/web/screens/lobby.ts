@@ -24,13 +24,18 @@ function parseSpeed(raw: string): WatchSpeed {
 
 /** Lobby fully owns `root.innerHTML` — it has no internal phase, so it never patches in place. */
 export function render(root: HTMLElement, store: Store): void {
+  // Sends queue while reconnecting (ws-client), but a stale click during a drop can still race a
+  // reconnect the user isn't aware of — simplest fix is to just not offer the action yet.
+  const isOpen = store.status === 'open';
+  const disabledAttr = isOpen ? '' : 'disabled';
+
   root.innerHTML = `
     <h1>Stratego</h1>
     <div class="lobby-grid">
       <section class="card">
         <h2>Play a friend</h2>
         <p class="hint">Create a room, then share the code with someone to join.</p>
-        <button type="button" data-action="create-friend">Create room</button>
+        <button type="button" data-action="create-friend" ${disabledAttr}>Create room</button>
       </section>
 
       <section class="card">
@@ -39,7 +44,7 @@ export function render(root: HTMLElement, store: Store): void {
           <label><input type="radio" name="bot-difficulty" value="random" checked /> Easy</label>
           <label><input type="radio" name="bot-difficulty" value="heuristic" /> Hard</label>
         </div>
-        <button type="button" data-action="create-bot">Create room</button>
+        <button type="button" data-action="create-bot" ${disabledAttr}>Create room</button>
       </section>
 
       <section class="card">
@@ -65,15 +70,16 @@ export function render(root: HTMLElement, store: Store): void {
             </select>
           </label>
         </div>
-        <button type="button" data-action="create-watch">Create room</button>
+        <button type="button" data-action="create-watch" ${disabledAttr}>Create room</button>
       </section>
 
       <section class="card">
         <h2>Join a room</h2>
         <div class="card-row">
           <input name="join-code" maxlength="5" placeholder="CODE" autocapitalize="characters" autocomplete="off" />
-          <button type="button" data-action="join">Join</button>
+          <button type="button" data-action="join" ${disabledAttr}>Join</button>
         </div>
+        ${isOpen ? '' : '<p class="hint">Connecting…</p>'}
       </section>
     </div>
   `;

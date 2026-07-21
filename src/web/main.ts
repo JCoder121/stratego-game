@@ -11,6 +11,7 @@ import { render as renderLobby } from './screens/lobby.js';
  */
 export interface Store {
   net: Net;
+  status: ConnStatus;
   role: Role | null;
   code: string | null;
   lastView: PlayerView | WatchView | null;
@@ -32,6 +33,7 @@ document.body.insertBefore(banner, app);
 const net = connect();
 const store: Store = {
   net,
+  status: 'connecting',
   role: null,
   code: null,
   lastView: null,
@@ -42,12 +44,15 @@ const store: Store = {
 };
 
 net.onStatus((s: ConnStatus) => {
+  store.status = s;
   if (s === 'open') {
     banner.hidden = true;
-    return;
+  } else {
+    banner.hidden = false;
+    banner.textContent = s === 'connecting' ? 'connecting…' : 'disconnected — retrying…';
   }
-  banner.hidden = false;
-  banner.textContent = s === 'connecting' ? 'connecting…' : 'disconnected — retrying…';
+  // Lobby gates its action buttons on store.status, so a status flip needs a re-render too.
+  renderCurrentScreen();
 });
 
 net.onMsg((msg: ServerMsg) => {
