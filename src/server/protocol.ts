@@ -49,6 +49,56 @@ export type ServerMsg =
 
 const CLIENT_TYPES = new Set(['CREATE_ROOM', 'JOIN_ROOM', 'REJOIN', 'COMMIT_SETUP', 'ACTION', 'REMATCH_REQUEST', 'WATCH_CONTROL']);
 
+const MODES = new Set<Mode>(['HUMAN_VS_HUMAN', 'HUMAN_VS_BOT', 'BOT_VS_BOT']);
+const BOT_KINDS = new Set<BotKind>(['random', 'heuristic']);
+const WATCH_SPEEDS = new Set<WatchSpeed>([500, 1000, 'step']);
+/** Numeric-only speeds accepted in WATCH_CONTROL's `speed` field (no 'step' there). */
+const WATCH_CONTROL_SPEEDS = new Set<number>([500, 1000]);
+const WATCH_CONTROLS = new Set(['play', 'pause', 'step', 'speed']);
+
+function isSquare(x: unknown): x is Square {
+  if (typeof x !== 'object' || x === null) return false;
+  const s = x as Record<string, unknown>;
+  return typeof s.r === 'number' && Number.isFinite(s.r) && typeof s.c === 'number' && Number.isFinite(s.c);
+}
+
+function isPlacement(x: unknown): x is [PieceId, Square][] {
+  if (!Array.isArray(x)) return false;
+  for (const entry of x) {
+    if (!Array.isArray(entry) || entry.length !== 2) return false;
+    const [pieceId, sq] = entry as [unknown, unknown];
+    if (typeof pieceId !== 'string') return false;
+    if (!isSquare(sq)) return false;
+  }
+  return true;
+}
+
+function isBotKind(x: unknown): x is BotKind {
+  return typeof x === 'string' && BOT_KINDS.has(x as BotKind);
+}
+
+function isWatchSpeed(x: unknown): x is WatchSpeed {
+  return (typeof x === 'number' || typeof x === 'string') && WATCH_SPEEDS.has(x as WatchSpeed);
+}
+
+function isCreateRoom(m: Record<string, unknown>): boolean {
+  if (typeof m.mode !== 'string' || !MODES.has(m.mode as Mode)) return false;
+  if (m.botDifficulty !== undefined && !isBotKind(m.botDifficulty)) return false;
+  if (m.bots !== undefined) {
+    if (typeof m.bots !== 'object' || m.bots === null) return false;
+    const bots = m.bots as Record<string, unknown>;
+    if (!isBotKind(bots.RED) || !isBotKind(bots.BLUE)) return false;
+  }
+  if (m.watchSpeed !== undefined && !isWatchSpeed(m.watchSpeed)) return false;
+  return true;
+}
+
+function isWatchControl(m: Record<string, unknown>): boolean {
+  if (typeof m.control !== 'string' || !WATCH_CONTROLS.has(m.control)) return false;
+  if (m.speed !== undefined && !(typeof m.speed === 'number' && WATCH_CONTROL_SPEEDS.has(m.speed))) return false;
+  return true;
+}
+
 export function isClientMsg(x: unknown): x is ClientMsg {
   if (typeof x !== 'object' || x === null) return false;
   const m = x as Record<string, unknown>;
@@ -56,9 +106,10 @@ export function isClientMsg(x: unknown): x is ClientMsg {
   switch (m.t) {
     case 'JOIN_ROOM': return typeof m.code === 'string';
     case 'REJOIN': return typeof m.code === 'string' && typeof m.token === 'string';
-    case 'COMMIT_SETUP': return Array.isArray(m.placement);
+    case 'COMMIT_SETUP': return isPlacement(m.placement);
     case 'ACTION': return typeof m.action === 'object' && m.action !== null && typeof m.seq === 'number' && ((m.action as { type?: unknown }).type === 'MOVE' || (m.action as { type?: unknown }).type === 'RESIGN');
-    case 'CREATE_ROOM': return typeof m.mode === 'string';
+    case 'CREATE_ROOM': return isCreateRoom(m);
+    case 'WATCH_CONTROL': return isWatchControl(m);
     default: return true;
   }
 }
