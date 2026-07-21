@@ -185,7 +185,7 @@ export class GameRoom {
   private sendTo(role: Role, msg: ServerMsg): void {
     for (const m of this.members.values()) {
       if (m.role === role) {
-        m.send(msg);
+        if (m.connected) m.send(msg);
         return;
       }
     }

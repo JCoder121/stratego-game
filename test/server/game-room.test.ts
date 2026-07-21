@@ -166,6 +166,49 @@ describe('GameRoom membership', () => {
 
     expect(room.rejoin('not-a-real-token', newRed.send)).toBeNull();
   });
+
+  it('COMMIT_SETUP after disconnect never invokes the stale send callback', () => {
+    const room = new GameRoom({ mode: 'HUMAN_VS_HUMAN', scheduler: manualScheduler() });
+    const red = member();
+    const blue = member();
+    const redJoin = room.joinHuman(red.send)!;
+    room.joinHuman(blue.send);
+
+    room.disconnect(redJoin.token);
+    const before = red.inbox.length;
+    // A bad (incomplete) COMMIT_SETUP would normally trigger an ERROR reply;
+    // since RED is disconnected, handle() must not throw and must not push
+    // through the stale `send` callback.
+    expect(() => room.handle(redJoin.token, { t: 'COMMIT_SETUP', placement: [] })).not.toThrow();
+    expect(red.inbox.length).toBe(before);
+  });
+
+  it('BOT_VS_BOT: spectator VIEW is a real WatchView (real ranks, no piece ids anywhere)', () => {
+    const room = new GameRoom({ mode: 'BOT_VS_BOT', scheduler: manualScheduler(), seed: 7 });
+    const spec = member();
+    const joined = room.joinHuman(spec.send);
+    expect(joined?.role).toBe('SPECTATOR');
+
+    const msg = lastMsg(spec.inbox);
+    expect(msg.t).toBe('VIEW');
+    if (msg.t !== 'VIEW') throw new Error('expected VIEW');
+    const view = msg.view as {
+      phase: string;
+      pieces: { owner: string; pos: Square; rank: string | null; revealed: boolean }[];
+    };
+    // Both bot seats set up at construction, so the room is already in PLAY.
+    expect(view.phase).toBe('PLAY');
+    expect(view.pieces.length).toBeGreaterThan(0);
+    for (const p of view.pieces) {
+      expect(p.rank).not.toBeNull();
+      expect('id' in p).toBe(false);
+    }
+
+    const serialized = JSON.stringify(msg);
+    expect(serialized).not.toMatch(
+      /(RED|BLUE)-(MARSHAL|GENERAL|COLONEL|MAJOR|CAPTAIN|LIEUTENANT|SERGEANT|MINER|SCOUT|SPY|BOMB|FLAG)-/,
+    );
+  });
 });
 
 describe('capturedRanks / watchView', () => {
